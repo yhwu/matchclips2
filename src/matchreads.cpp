@@ -1,0 +1,661 @@
+#include <pthread.h>
+#include <stdio.h>
+#include <string.h>
+#include <iostream>
+#include <string>
+#include <iomanip>
+#include <fstream>
+#include <math.h>
+#include <complex>
+#include <map>
+#include <algorithm>
+#include <string>
+#include <vector>
+#include <unistd.h>
+using namespace std;
+
+/**** user samtools headers ****/
+#include "samfunctions.h"
+
+/**** user headers ****/
+#include "functions.h"
+#include "readref.h"
+#include "matchreads.h"
+#include "preprocess.h"
+#include "exhaustive.h"
+#include "pairguide.h"
+
+pthread_mutex_t nout;
+
+double ED_st::linc=1;
+double ED_st::rinc=1;
+
+int msc::pid=getpid();
+long msc::seed=137;
+bool msc::debug=false;
+int msc::start=0;
+int msc::end=0;
+ofstream msc::fout;
+string msc::mycommand="";
+string msc::execinfo="";
+string msc::bamFile="";
+vector<string> msc::bamRegion(0);
+string msc::refFile="";
+string msc::cnvFile="";
+string msc::outFile="STDOUT";
+string msc::logFile="";
+string msc::function="";
+int msc::verbose=0;
+int msc::numThreads=1;
+int msc::maxMR=4000;
+int msc::errMatch=2;
+int msc::minSNum=11;
+int msc::minOverlap=25;
+int msc::minOverlapPlus=10;
+int msc::minMAPQ=10;
+int msc::minBASEQ=0;
+int msc::minClusterSize=6;
+bool msc::search_length_set_by_user=false;
+int msc::maxDistance=(int)1E6;
+bool msc::noSecondary=true;
+bool msc::dumpBam=false;
+int msc::bam_ref=-1;
+int msc::bam_l_qseq=0;
+bool msc::bam_is_paired=false;
+bool msc::bam_pe_disabled=false;
+bool msc::bam_pe_set_by_user=false;
+int msc::bam_pe_insert=500;
+int msc::bam_pe_insert_sd=50;
+int msc::bam_rd=0;
+int msc::bam_rd_sd=0;
+int msc::bam_tid=-1;        //! if msc::tid>0 only process msc::tid
+string msc::chr="chr";
+vector<string> msc::bam_target_name(0);
+vector<uint8_t> msc::bdata(0); 
+vector<uint8_t> msc::bpdata(0); 
+vector<uint32_t> msc::rd(0); 
+samfile_t *msc::fp_in = NULL;
+bam_index_t *msc::bamidx=NULL;
+samfile_t *msc::fp_out = NULL;
+
+bool sort_pair(const intpair_st& p1, const intpair_st& p2)
+{
+  if ( p1.F2 != p2.F2 ) return p1.F2<p2.F2;
+  return p1.R1<p2.R1;
+}
+bool sort_pair_len(const intpair_st& p1, const intpair_st& p2)
+{
+  return (p1.R1-p1.F2) < (p2.R1-p2.F2) ;
+}
+bool sort_pair_info(const pairinfo_st& p1, const pairinfo_st& p2)
+{
+  if ( p1.F2 != p2.F2 ) return p1.F2<p2.F2;
+  return p1.R1<p2.R1;
+}
+bool sort_pair_info_output(const pairinfo_st& p1, const pairinfo_st& p2)
+{
+  int p1F=p1.F2;
+  int p1R=p1.R1;
+  int p2F=p2.F2;
+  int p2R=p2.R1;
+  
+  if ( p1F>p1R ) swap(p1F, p1R);
+  if ( p2F>p2R ) swap(p2F, p2R);
+  
+  if ( p1F != p2F ) return p1F<p2F;
+  return p1R<p2R;
+}
+
+string cnv_format1()
+{
+  std::stringstream ss;
+  ss << "#CHR" << "\t" 
+     << "BEGIN" << "\t" 
+     << "END" << "\t" 
+     << "TYPE" << "\t"
+     << "LENGTH" << "\t"
+     << "REF_REPEAT:" << "#" << "\t"
+     << "READDEPTH:" 
+     << "LSIDE" << ";"
+     << "RSIDE" << ";"
+     << "BETWEEN" << ":"
+     << "RDSCORE" << "\t"
+     << "READPAIR:"
+     << "CROSSL" << ";"
+     << "CROSSR" << ";"
+     << "ENVELOPEBOTH" << ":"
+     << "RPSCORE" << "\t"
+     << "MATCHINGREADS:"
+     << "LSIDE" << ";"
+     << "RSIDE" << ";"
+     << "EDITDISTANCE" << ":"
+     << "MRSCORE" << "\t"
+     << "SPLITREAD:#;#\t"
+     << "Q0:q<=0;q<=10";
+  
+  return ss.str();
+}
+
+string cnv_format1(pairinfo_st &bp1)
+{
+  std::stringstream ss;
+  pairinfo_st bp=bp1;
+  
+  string RNAME="chr";
+  if ( bp.tid>=0 && bp.tid<(int)msc::bam_target_name.size() )
+    RNAME=msc::bam_target_name[bp.tid];
+  string TYPE= bp.F2 < bp.R1 ? "DEL" : "DUP";
+  if ( bp.F2>bp.R1 ) { 
+    swap(bp.F2, bp.R1);
+    swap(bp.F2_rd, bp.R1_rd);
+    swap(bp.F2_rp, bp.R1_rp);
+    swap(bp.F2_sr, bp.R1_sr);
+  }
+  
+  ss << RNAME << "\t" 
+     << bp.F2+1 << "\t" 
+     << bp.R1+1 << "\t" 
+     << TYPE << "\t"
+     << bp.R1-bp.F2 << "\t"
+     << "UN:" << bp.un << "\t"
+     << "RD:" 
+     << bp.F2_rd << ";"
+     << bp.R1_rd << ";"
+     << bp.rd << ":"
+     << bp.rdscore << "\t"
+     << "RP:"
+     << bp.F2_rp << ";"
+     << bp.R1_rp << ";"
+     << bp.pair_count << ":"
+     << bp.rpscore << "\t"
+     << "MR:"
+     << bp.F2_sr << ";"
+     << bp.R1_sr << ";"
+     << bp.MS_ED << ":"
+     << bp.srscore << "\t"
+     << "SR:"
+     << bp.sr_ed << ";"
+     << bp.sr_count;
+  // << bp.sr_count << "\t"
+  // << BPMARKER ;
+  
+  return ss.str() ;
+}
+
+string cnv_format_all(pairinfo_st &bp1)
+{
+  std::stringstream ss;
+  
+  int F2=bp1.F2;
+  int R1=bp1.R1;
+  if ( F2> R1 ) swap(F2, R1);
+  
+  double q0, q10;
+  check_map_quality(bp1.tid, F2, R1, q0, q10);  
+  
+  int i0=q0*100+0.5;
+  int i10=q10*100+0.5;
+  
+  ss << cnv_format1(bp1) << "\tQ0:" << i0 << ";" << i10;
+  
+  return ss.str() ;
+}
+
+string mr_format1(pairinfo_st &bp)
+{
+  std::stringstream ss;
+  
+  string RNAME="chr";
+  if ( bp.tid>=0 && bp.tid<(int)msc::bam_target_name.size() )
+    RNAME=msc::bam_target_name[bp.tid];
+  int F2=bp.MS_F2;
+  int R1=bp.MS_R1;
+  string TYPE= F2 < R1 ? "DEL" : "DUP";
+  if ( F2>R1 ) swap (F2,R1);
+  
+  ss << RNAME << " " 
+     << F2+1 << " " 
+     << R1+1 << " " 
+     << TYPE << " "
+     << bp.MS_R1-bp.MS_F2 << " "
+     << "UN:" << bp.un << " "
+     << "MD:"
+     << bp.MS_F2_rd << ";"
+     << bp.MS_R1_rd << " "
+     << "MR:"
+     << bp.F2_sr << ";"
+     << bp.R1_sr << ";"
+     << bp.MS_ED << ":"
+     << bp.srscore << " "
+     << "SR:"
+     << bp.sr_ed << ";"
+     << bp.sr_count;
+  
+  return ss.str() ;
+}
+
+void write_cnv_to_file(vector<pairinfo_st>& bp)
+{
+  for(size_t i=0;i<bp.size();++i) cout << cnv_format_all(bp[i]) << endl;
+  return;
+}
+
+void write_cnv_to_file(vector<pairinfo_st>& bp, string fn)
+{
+  static vector<string> files(0);
+  if ( fn=="STDOUT" ) {
+    for(size_t i=0;i<bp.size();++i) cout << cnv_format_all(bp[i]) << endl;
+    return;
+  }
+  
+  bool is_new=false;
+  is_new = find(files.begin(), files.end(), fn) == files.end() ? true : false ;
+  
+  ofstream FOUT;
+  if ( is_new ) {
+    FOUT.open(fn.c_str());
+    files.push_back(fn);
+    FOUT << cnv_format1() << endl;
+  }    
+  else FOUT.open(fn.c_str(), std::ofstream::app);
+  
+  for(size_t i=0;i<bp.size();++i) FOUT << cnv_format_all(bp[i]) << endl;
+  FOUT.close();
+  return;
+}
+
+string tmpfile(int thread_id) {
+  string tmps="matchclipstmpdata."+
+    to_string(msc::pid)+"."+to_string(msc::numThreads)+"."+to_string(thread_id);
+  return tmps;
+}
+
+void write_ED_st_to_file(vector<ED_st>& ed, string fn)
+{
+  static vector<string> files(0);
+  
+  bool is_new=false;
+  is_new = find(files.begin(), files.end(), fn) == files.end() ? true : false ;
+  
+  ofstream FOUT;
+  if ( is_new ) {
+    FOUT.open(fn.c_str());
+    files.push_back(fn);
+  }    
+  else FOUT.open(fn.c_str(), std::ofstream::app);
+  
+  for(size_t i=0;i<ed.size();++i) 
+    FOUT << ed[i].iL << "\t" << ed[i].F2 << "\t" << ed[i].iR << "\t" << ed[i].R1 
+	 << ed[i].ED << "\t" << ed[i].count << "\n";
+  
+  FOUT.flush();
+  return;
+}
+
+void get_pairend_info(int ref, int beg, int end)
+{
+  bam1_t *b=NULL; b = bam_init1();
+  bam_iter_t iter;
+  
+  size_t count=0;
+  int l_qseq=100; double l_qseq_sum=0.0;
+  double isize=0.0, isize2=0.0, isize_c=0, isize_sd=0.0;
+  
+  iter = bam_iter_query(msc::bamidx, ref, beg, end);
+  
+  while(  bam_iter_read(msc::fp_in->x.bam, iter, b)  > 0 ) {
+    ++count;
+    l_qseq_sum+=b->core.l_qseq;
+    if ( (int)b->core.tid < 0 ) continue;
+    if ( b->core.mtid != b->core.tid && b->core.mtid>0 ) continue;
+    if ( bool(b->core.flag&BAM_FREVERSE) ==
+	 bool(b->core.flag&BAM_FMREVERSE) ) continue;
+    if ( b->core.flag & BAM_DEF_MASK ) continue;
+    if ( !(b->core.flag & BAM_FPROPER_PAIR) ) continue;
+    if ( b->core.qual < msc::minMAPQ ) continue;
+    
+    isize   += abs(b->core.isize);
+    isize2  += (double)b->core.isize * (double)b->core.isize;
+    isize_c += 1;
+    if ( isize_c > 10000 ) break;
+    if ( count > 200000 ) break;
+  }
+  cerr << endl;
+  
+  if (count>0) l_qseq=l_qseq_sum/count+0.5;
+  else {
+    cerr << "cannot find any reads in region: "
+	 << msc::fp_in->header->target_name[ ref ] << "\t" 
+	 << beg << "\t" << end 
+	 << endl; 
+    return;
+  }
+  
+  //update main control
+  msc::bam_ref=ref;
+  msc::bam_l_qseq=l_qseq;
+  if ( isize_c>2 ) {
+    isize/=isize_c;
+    isize_sd =sqrt( (isize2-isize*isize*isize_c)/isize_c );
+    if ( isize_sd<30 ) {
+      cerr << "isize sd is too small " << isize_sd << " changed to 30" << endl;  
+      isize_sd=30;
+    }
+    msc::bam_is_paired=true;
+    msc::bam_pe_insert=isize;
+    msc::bam_pe_insert_sd=isize_sd;
+  }
+  cerr << "sampled from " << isize_c << " reads" << endl
+       << "bam_l_qseq\t" << msc::bam_l_qseq << "\n"
+       << "bam_is_paired\t" << msc::bam_is_paired << "\n"
+       << "bam_pe_insert\t" << msc::bam_pe_insert << "\n"
+       << "bam_pe_insert_sd\t" << msc::bam_pe_insert_sd << "\n"
+       << endl;
+  
+  
+  if ( isize>1000 || isize_sd>2*isize || isize_sd<0 ) {
+    cerr << "unusual behavior\n"
+	 << msc::fp_in->header->target_name[ ref ] << endl
+	 << ref << "\t" << beg << "\t" << end << endl
+	 << isize << "\t" << isize2 << "\t" << isize_c << endl
+	 << "continue with default values 250 50"
+	 << endl;
+    msc::bam_pe_insert=250;
+    msc::bam_pe_insert_sd=50;
+  }
+
+  if ( msc::minOverlap*4<msc::bam_l_qseq ) {
+    msc::minOverlap=msc::bam_l_qseq/4;
+    cerr << "length of minimum overlap changed to: " << msc::minOverlap << endl;
+  }
+
+  if ( b ) bam_destroy1(b);
+  if ( iter) bam_iter_destroy(iter);
+  return;
+}
+
+
+void get_bam_info()
+{
+  
+  bam1_t *b=NULL;   
+  b = bam_init1();
+  bam_iter_t iter=0;
+  int ref=0, beg=0, end=0x7fffffff;
+  
+  for(int i=0;i<msc::fp_in->header->n_targets;++i) 
+    msc::bam_target_name.push_back( string(msc::fp_in->header->target_name[i]) );
+  
+  if ( msc::bam_target_name.size() == 0 ) 
+    cerr << "#no header in bam file? " << msc::bamFile << endl;
+  
+  if ( msc::bamRegion.size() == 0 ) msc::bamRegion=msc::bam_target_name;
+  bool have_reads=true;
+  for( int i=0; i<(int)msc::bamRegion.size(); ++i) {
+    have_reads=true;
+    if ( msc::bamRegion[i].find(":") == string::npos ) msc::bamRegion[i]+=":";
+    ref=-1;
+    int is_solved=bam_parse_region(msc::fp_in->header, msc::bamRegion[i].c_str(), &ref, &beg, &end); 
+    if ( is_solved<0 || ref<0 || ref>=msc::fp_in->header->n_targets ) {
+      cerr << "Cannt resolve region " << msc::bamRegion[i] << endl;
+      have_reads=false;
+    }
+    else {
+      iter = bam_iter_query(msc::bamidx, ref, beg, end);
+      if ( bam_iter_read(msc::fp_in->x.bam, iter, b)>0 ) {
+	string RNAME=msc::fp_in->header->target_name[b->core.tid];
+	if ( msc::bamRegion[i].find(RNAME) == 0 ) 
+	  cerr << msc::bamFile << " has reads on " << msc::bamRegion[i] << endl;
+	else have_reads=false;
+      }
+      else have_reads=false;;
+    }
+    
+    if ( have_reads==false ) {
+      // cerr << msc::bamFile << " does not have reads on " << msc::bamRegion[i] << endl;
+      msc::bamRegion[i]="NA";
+    }
+  }
+  
+  if ( b ) bam_destroy1(b);
+  if ( iter ) bam_iter_destroy(iter);
+  
+  return;
+}
+
+int usage_match_MS_SM_reads(int argc, char* argv[]) {
+  string app=string(argv[0]);
+  if ( app.rfind('/') != string::npos ) app=app.substr(1+app.rfind('/'));
+  cerr << "Usage:\n" 
+       << "  " << app << " <options> -f REFFILE -b BAMFILE [REGION]\n"
+       << "\nOptions:\n"
+       << "  -t  INT  number of threads, INT=1 \n"
+       << "  -e  INT  max allowed mismatches when matching strings, INT=2 \n"
+       << "  -l  INT  minimum length of overlap, INT=25 \n"
+       << "  -s  INT  minimum number of soft clipped bases, INT=10 \n"
+       << "  -q  INT  minimum mapping score, INT=10 \n"
+       << "  -Q  INT  minimum base read quality, INT=0 \n"
+       << "  -L  INT  check reads before and after INT bases, INT=auto \n"
+       << "  -L  0    pair end mode only \n"
+       << "  -se      single end mode, do not use pair end distances\n"
+       << "  -pe INT INT provide insert and s.d. of insert, otherwise calculate them\n"
+       << "  -o  STR  outputfile, STR=STDOUT \n"
+       << "   REGION  if given should be in samtools's region format \n"
+       << "\nExamples:\n"
+       << "  " << argv[0] << "      -f hg19.fasta -b A.bam -o A.txt\n"
+       << "  " << argv[0] << " -t 4 -f hg19.fasta -b A.bam chr1 -o A.txt\n"
+       << "\nDiscussion:\n"
+       << "  1. max allowed mismatches when matching reads\n"
+       << "     This number is also adjusted according to the length of\n"
+       << "     overlap. If this numer multipled by 12 is greated than the length\n"
+       << "     false is returned.\n"
+       << "  2. minimum length of overlap\n"
+       << "     This number is also adjusted so that it is no less than\n"
+       << "     1/4 of the reads.\n"
+       << "  3. mapping quality\n"
+       << "     Mapping quality is checked for reads matching and pair end distances\n"
+       << "     but not for read depth. It is so to be consistent with samtools\n"
+       << "     mpileup. The BAM_DEF_MASK filter is used for all reads. Reads that are\n"
+       << "     BAM_FUNMAP or BAM_FSECONDARY or BAM_FQCFAIL or BAM_FDUP are ignored.\n"
+       << "  4. pair-end insert and s.d.\n"
+       << "     Pair-end insert and s.d. are calculated from the bam file if not given.\n"
+       << "     They can be overwritten by the -pe INT INT option. Inserts longer than\n"
+       << "     insert+6s.d. are used to find structure variations. Reads matching is\n"
+       << "     performed for reads whose POS's are with in insert+8s.d. So basically,\n"
+       << "     pair end distances and read depths are used to find longer variations,\n"
+       << "     and split reads are used to find shorter variations. This allows for\n"
+       << "     fast processing of high coverage whole genome data. The range of reads\n"
+       << "     matching can be overwritten by the -L INT option.\n"
+       << "\nOutput:\n"
+       << "     Please refer to https://github.com/yhwu/matchclips2"
+       << endl;
+  
+  return(0);
+}
+
+int get_parameters(int argc, char* argv[])
+{
+#define _next3 ARGV[i]=""; ARGV[i+1]=""; ARGV[i+2]=""; continue;
+#define _next2 ARGV[i]=""; ARGV[i+1]=""; continue;
+#define _next1 ARGV[i]=""; continue;
+  
+  size_t i;
+  vector<string> ARGV(0);
+
+  for(i=0; (int)i<argc; ++i) ARGV.push_back( string(argv[i]) );
+  
+  msc::mycommand=ARGV[0];
+  for(i=1;i<ARGV.size();++i) msc::mycommand+=" "+ARGV[i];
+  
+  for(i=1;i<ARGV.size();++i) {
+    if ( ARGV[i]=="-b" ) {    // input bam file
+      msc::bamFile=ARGV[i+1]; // input regions
+      for( int k=i+2; k<(int)ARGV.size(); ++k ) {
+	if ( ARGV[k][0] == '-' ) break;
+	msc::bamRegion.push_back( ARGV[k] );
+	ARGV[k]="";
+      }
+      _next2;
+    }
+    if ( ARGV[i]=="-f" ) { msc::refFile=ARGV[i+1]; _next2; }
+    if ( ARGV[i]=="-o" ) { msc::outFile=ARGV[i+1]; _next2; }
+    if ( ARGV[i]=="-t" ) { msc::numThreads=atoi(ARGV[i+1].c_str()); _next2; }
+    if ( ARGV[i]=="-e" ) { msc::errMatch=atoi(ARGV[i+1].c_str()); _next2; }
+    if ( ARGV[i]=="-l" ) { msc::minOverlap=atoi(ARGV[i+1].c_str()); _next2; }
+    if ( ARGV[i]=="-s" ) { msc::minSNum=atoi(ARGV[i+1].c_str()); _next2; }
+    if ( ARGV[i]=="-q" ) { msc::minMAPQ=atoi(ARGV[i+1].c_str()); _next2; }
+    if ( ARGV[i]=="-Q" ) { msc::minBASEQ=atoi(ARGV[i+1].c_str()); _next2; }
+    if ( ARGV[i]=="-2" ) { msc::noSecondary=false; _next1; }
+    if ( ARGV[i]=="-L" ) { 
+      msc::search_length_set_by_user=true;
+      msc::maxDistance=atoi(ARGV[i+1].c_str()); _next2; 
+    }
+    if ( ARGV[i]=="-v" ) { msc::verbose=1; _next1; }
+    if ( ARGV[i]=="-vv" ) { msc::verbose=2; _next1; }
+    if ( ARGV[i]=="-vvv" ) { msc::verbose=3; _next1; }
+    if ( ARGV[i]=="-dump" ) { msc::dumpBam=true; _next1; }
+    if ( ARGV[i]=="-cnv" ) { msc::cnvFile=ARGV[i+1]; _next2; }
+    if ( ARGV[i]=="-se" ) { msc::bam_pe_disabled=true; _next1; }
+    if ( ARGV[i]=="-pe" ) { 
+      msc::bam_pe_set_by_user=true;
+      msc::bam_pe_insert=atoi(ARGV[i+1].c_str());
+      msc::bam_pe_insert_sd=atoi(ARGV[i+2].c_str());
+      if ( to_string(abs(msc::bam_pe_insert)) == ARGV[i+1] && 
+	   to_string(abs(msc::bam_pe_insert_sd)) == ARGV[i+2] ) _next3;
+      cerr << "pair end parameters are given by -pe isize isize_std" << endl;
+      exit(0);
+    }
+  }
+  
+  if ( msc::bamFile=="" ) {
+    cerr << "Need bam file\n";
+    exit( usage_match_MS_SM_reads(argc, argv) );
+  }
+  if ( msc::refFile=="" ) {
+    cerr << "Need reference file\n";
+    exit( usage_match_MS_SM_reads(argc, argv) );
+  }
+  bool is_unknown_parameter=false;
+  for(i=1;i<ARGV.size();++i) {
+    if ( ARGV[i]!="" ) {
+      cerr << "unknown argument:\t" << ARGV[i] << endl;
+      is_unknown_parameter=true;
+    }
+  }
+  if ( is_unknown_parameter ) exit( usage_match_MS_SM_reads(argc, argv) );
+  
+  string tmps="";
+  for(i=0;i<msc::bamRegion.size();++i) {
+    tmps+=msc::bamRegion[i]+" ";
+  }
+  msc::execinfo="#Command Line     : " + msc::mycommand + "\n" +
+    "#Input bamfile    : " + msc::bamFile + "\n" +
+    "#Bamfile region   : " + tmps + "\n" +
+    "#FASTAfile        : " + msc::refFile + "\n" +
+    "#Num of S bases   : " + to_string(msc::minSNum) + "\n" +
+    "#Minumum overlap  : " + to_string(msc::minOverlap) + "\n" +
+    "#Minimum mapq     : " + to_string(msc::minMAPQ) + "\n" +
+    "#Allowed mismatch : " + to_string(msc::errMatch) + "\n" +
+    "#Maximum distance : " + to_string(msc::maxDistance) + "\n" +
+    "#Output           : " + msc::outFile + "\n"+
+    "#Output           : " + msc::outFile + ".weak\n";
+  
+  cerr << msc::execinfo << endl;
+  
+  return 1;
+}
+
+void match_MS_SM_reads(int argc, char* argv[])
+{
+  if ( argc<3 )  exit( usage_match_MS_SM_reads(argc, argv) );
+  get_parameters(argc, argv);
+  
+  string FASTA; string fastaname="";
+  
+  int ref=0, beg=0, end=0x7fffffff;
+  
+  // load BAM and index; check regions
+  msc::fp_in=samopen(msc::bamFile.c_str(), "rb", 0);
+  if ( ! msc::fp_in ) {
+    cerr << msc::bamFile << " not found!" << endl;
+    exit(0);
+  }
+  msc::bamidx=bam_index_load(msc::bamFile.c_str()); 
+  if ( ! msc::bamidx ) {
+    cerr << msc::bamFile << " idx not found!" << endl;
+    exit(0);
+  }
+  get_bam_info();
+  
+  if ( msc::dumpBam ) {
+    msc::fp_out = msc::outFile=="STDOUT" ? 
+      samopen("-", "w", msc::fp_in->header) :
+      samopen(msc::outFile.c_str(), "wb", msc::fp_in->header) ;
+  }
+  
+  for(int ichr=0; ichr<(int)msc::bamRegion.size(); ++ichr ) {
+    if ( msc::bamRegion[ichr]=="NA" ) continue;
+    cerr << "processing region:\t" << msc::bamRegion[ichr] << endl;
+    
+    ref=-1; beg=0; end=0x7fffffff;
+    int is_solved=bam_parse_region(msc::fp_in->header, msc::bamRegion[ichr].c_str(), &ref, &beg, &end); 
+    if ( is_solved<0 || ref<0 || ref>=(int)msc::bam_target_name.size() ) continue;
+    msc::bam_ref=ref;
+    
+    if ( !msc::bam_pe_set_by_user ) get_pairend_info(ref, beg, end);
+    
+    //! load reference sequence
+    if ( msc::bam_target_name[msc::bam_ref] != fastaname ) {
+      fastaname=msc::bam_target_name[ref];
+      load_reference(msc::refFile, fastaname, FASTA);
+      if ( FASTA.size() != msc::fp_in->header->target_len[msc::bam_ref] )
+	cerr << "not exactly the same reference, expected length " 
+	     << msc::fp_in->header->target_len[msc::bam_ref]  
+	     << " loaded " << FASTA.size() 
+	     << endl;
+    }
+    
+    vector<intpair_st> pairs(0);
+    vector<bam1_t> b_MS(0);
+    vector<bam1_t> b_SM(0);
+    
+    int min_pair_length=msc::bam_pe_insert+msc::bam_pe_insert_sd*6;
+    //if ( min_pair_length<1000 ) min_pair_length=1000;
+    prepare_pairend_matchclip_data(ref, beg, end, min_pair_length, FASTA,
+				   pairs, b_MS, b_SM);
+    
+    vector<pairinfo_st> pairbp_pe(0);
+    if (! msc::bam_pe_disabled ) {
+      pair_guided_search(pairs, FASTA, pairbp_pe) ;
+      // pair_guided_search(ref, beg, end, min_pair_length, FASTA, pairbp_pe);
+      vector<intpair_st> (0).swap(pairs);
+    }
+    
+    vector<pairinfo_st> pairbp_mc(0);
+    int search_length=msc::bam_pe_insert+msc::bam_pe_insert_sd*8;
+    if ( msc::bam_pe_disabled || msc::search_length_set_by_user ) 
+      search_length=msc::maxDistance;
+    exhaustive_search(b_MS, b_SM, search_length, FASTA, pairbp_mc);
+    // exhaustive_search(ref, beg, end, search_length, FASTA, pairbp_mc);
+    
+    pairbp_mc.insert(pairbp_mc.end(), pairbp_pe.begin(), pairbp_pe.end() ); 
+    sort(pairbp_mc.begin(), pairbp_mc.end(), sort_pair_info);
+    
+    vector<pairinfo_st> strong, weak;
+    finalize_output(pairbp_mc, strong, weak);    
+    sort(strong.begin(), strong.end(), sort_pair_info_output);
+    sort(weak.begin(), weak.end(), sort_pair_info_output);
+    write_cnv_to_file(strong, msc::outFile);
+    write_cnv_to_file(weak, string(msc::outFile+".weak"));    
+    
+  } // done
+  
+  if ( msc::fp_in ) samclose(msc::fp_in);
+  if ( msc::bamidx )bam_index_destroy(msc::bamidx);
+  if ( msc::fp_out ) samclose(msc::fp_out);
+  if ( msc::dumpBam && msc::outFile!="" ) bam_index_build(msc::outFile.c_str());
+  
+  cerr << msc::execinfo << endl;
+  return;
+}
+
