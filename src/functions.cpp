@@ -727,3 +727,29 @@ void runmed(int* y, int* smo, int n, int band)
 { Srunmed(y, smo, n, band, 0, 0); }
 void runmed(unsigned short int* y, unsigned short int* smo, int n, int band)
 { Srunmed(y, smo, n, band, 0, 0); }
+
+
+void check_github_update(string & compiledtime, string & updatefile)
+{
+  string updatedTime="NULL";
+  bool is_curl=false;
+  bool is_wget=false;
+  string cmd="curl --head " + updatefile + " 2>/dev/null";
+  FILE* pipe = popen(cmd.c_str(), "r");
+  if (pipe) {
+    cerr << cmd << endl;
+    fgetline(pipe, updatedTime);
+  }
+  else {
+    cmd="wget -O - " + updatefile;
+    pclose(pipe);
+    pipe = popen(cmd.c_str(), "r");
+    if (pipe) {
+      cerr << cmd << endl;
+      fgetline(pipe, updatedTime);
+    }
+  }
+  cerr << updatedTime << endl;
+
+  return;
+}

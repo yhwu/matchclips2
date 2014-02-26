@@ -818,15 +818,22 @@ void pair_guided_search(vector<intpair_st>& pairs, string& FASTA,
     assess_rd_rp_sr_infomation( pairbp[i] );
     cerr << "matched:  " << mr_format1(pairbp[i]) << endl;
     // update pos and check rd and rp info
-    if ( pairbp[i].srscore>0 && 
-	 abs(pairbp[i].F2-pairbp[i].MS_F2)<msc::bam_l_qseq/2 && 
-	 abs(pairbp[i].R1-pairbp[i].MS_R1)<msc::bam_l_qseq/2 ) {
+    //if ( pairbp[i].srscore>0 && 
+    //	 abs(pairbp[i].F2-pairbp[i].MS_F2)<msc::bam_l_qseq/2 && 
+    //	 abs(pairbp[i].R1-pairbp[i].MS_R1)<msc::bam_l_qseq/2 ) {
+    if ( pairbp[i].srscore>0 ) {
       ibp=pairbp[i];
       ibp.F2=ibp.MS_F2;
       ibp.R1=ibp.MS_R1;
       stat_region( ibp, FASTA, msc::bam_l_qseq*4 );
       assess_rd_rp_sr_infomation( ibp );
-      if ( ibp.rdscore>0 || ibp.rpscore>0 ) pairbp[i]=ibp;
+      cnv=cnv_format1(ibp);
+      for(size_t t=0; t<cnv.size(); ++t) if (cnv[t]=='\t') cnv[t]=' ';
+      cerr << "matched:  " << cnv << endl;
+      if ( ibp.rdscore>=2 || 
+	   ibp.rpscore>=2 ||
+	   ibp.rpscore>=pairbp[i].rpscore ||
+	   ibp.srscore>=3  ) pairbp[i]=ibp;
     }
     count += ( pairbp[i].srscore>0 )  ;
     

@@ -27,13 +27,24 @@ using namespace std;
 
 #include "functions.h"
 
+#ifndef _BUILD_TIME
+#define _BUILD_TIME string(__DATE__)+" "+string(__TIME__);
+#endif
+
 void match_MS_SM_reads(int argc, char* argv[]);
 
 int main(int argc, char* argv[])
 {
   time_t begin_T,end_T;
   int pid = getpid();
-
+  
+  string build_time= _BUILD_TIME;
+  cerr << build_time << endl;
+  string updateFile="https://raw.github.com/yhwu/matchclips2/master/src/UPDATED";
+  check_github_update(build_time, updateFile);
+  
+  exit(0);
+  
   time(&begin_T);
   match_MS_SM_reads(argc, argv);  
   

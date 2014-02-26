@@ -893,7 +893,7 @@ void assess_rd_rp_sr_infomation(pairinfo_st& ibp, int medRD, int medRP)
   int rd_expected=(double)rd_normal/2.0f*msc::bam_pe_insert/2.0f/msc::bam_l_qseq;
   int pr_expected=pr_normal;
   if ( ibp.F2 > ibp.R1 ) {
-    rd_expected=(double)rd_normal/3.0f*msc::bam_pe_insert/2.0f/msc::bam_l_qseq;
+    rd_expected=(double)rd_normal/2.0f*msc::bam_pe_insert/2.0f/msc::bam_l_qseq;
     pr_expected=pr_normal/2;
   }
   pr_expected= ibp.F2_rp>0 ? (pr_expected+rd_expected)*0.5f : rd_expected ;
@@ -922,17 +922,24 @@ void assess_rd_rp_sr_infomation(pairinfo_st& ibp, int medRD, int medRP)
   if ( ibp.F2_rd>0 && ibp.R1_rd>0 ) { 
     // read depth available
     if ( ibp.F2_sr*8 > ibp.F2_rd || ibp.R1_sr*8 > ibp.R1_rd ) srscore=1;
-    if ( ibp.F2_sr*4 > ibp.F2_rd || ibp.R1_sr*4 > ibp.R1_rd ) srscore=2;
-    if ( ibp.F2_sr*3 > ibp.F2_rd && ibp.R1_sr*3 > ibp.R1_rd ) srscore=3;
+    if ( (ibp.F2_sr*4 > ibp.F2_rd || ibp.R1_sr*4 > ibp.R1_rd) &&
+	 (ibp.F2_sr*8 > ibp.F2_rd && ibp.R1_sr*8 > ibp.R1_rd) ) srscore=2;
+    if ( (ibp.F2_sr*3 > ibp.F2_rd ||  ibp.R1_sr*3 > ibp.R1_rd) &&
+	 (ibp.F2_sr*4 > ibp.F2_rd && ibp.R1_sr*4 > ibp.R1_rd) ) srscore=3;
+    if ( ibp.F2_sr*3 > ibp.F2_rd &&  ibp.R1_sr*3 > ibp.R1_rd ) srscore=4;
   }
   else {
     // read depth at bp points are always available
     if ( ibp.F2_sr*8 > ibp.MS_F2_rd || ibp.R1_sr*8 > ibp.MS_R1_rd ) srscore=1;
-    if ( ibp.F2_sr*4 > ibp.MS_F2_rd || ibp.R1_sr*4 > ibp.MS_R1_rd ) srscore=2;
-    if ( ibp.F2_sr*3 > ibp.MS_F2_rd && ibp.R1_sr*3 > ibp.MS_R1_rd ) srscore=3;
+    if ( (ibp.F2_sr*4 > ibp.MS_F2_rd || ibp.R1_sr*4 > ibp.MS_R1_rd) &&
+	 (ibp.F2_sr*8 > ibp.MS_F2_rd && ibp.R1_sr*8 > ibp.MS_R1_rd) ) srscore=2;
+    if ( (ibp.F2_sr*3 > ibp.MS_F2_rd ||  ibp.R1_sr*3 > ibp.MS_R1_rd) &&
+	 (ibp.F2_sr*4 > ibp.MS_F2_rd && ibp.R1_sr*4 > ibp.MS_R1_rd) ) srscore=3;
+    if ( ibp.F2_sr*3 > ibp.MS_F2_rd &&  ibp.R1_sr*3 > ibp.MS_R1_rd ) srscore=4;
   }
   if ( ibp.MS_ED>msc::bam_l_qseq/2 ) srscore=0;
-  if ( ibp.F2_sr<=2 && ibp.R1_sr<=2 ) srscore=0;
+  if ( ibp.F2_sr<=2 && ibp.R1_sr<=2 ) if ( srscore>0 ) srscore=0;
+  if ( ibp.F2_sr<=2 || ibp.R1_sr<=2 ) if ( srscore>1 ) srscore=1;
   
   // only update score for calculated values
   if ( ibp.F2_rp>=0 ) ibp.rpscore=rpscore;

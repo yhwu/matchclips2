@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 #include <unistd.h>
+#include "color.h"
 using namespace std;
 
 /**** user samtools headers ****/
@@ -145,6 +146,7 @@ string cnv_format1(pairinfo_st &bp1)
   if ( bp.tid>=0 && bp.tid<(int)msc::bam_target_name.size() )
     RNAME=msc::bam_target_name[bp.tid];
   string TYPE= bp.F2 < bp.R1 ? "DEL" : "DUP";
+  int len=bp.R1-bp.F2;
   if ( bp.F2>bp.R1 ) { 
     swap(bp.F2, bp.R1);
     swap(bp.F2_rd, bp.R1_rd);
@@ -156,7 +158,7 @@ string cnv_format1(pairinfo_st &bp1)
      << bp.F2+1 << "\t" 
      << bp.R1+1 << "\t" 
      << TYPE << "\t"
-     << bp.R1-bp.F2 << "\t"
+     << len << "\t"
      << "UN:" << bp.un << "\t"
      << "RD:" 
      << bp.F2_rd << ";"
@@ -201,23 +203,27 @@ string cnv_format_all(pairinfo_st &bp1)
   return ss.str() ;
 }
 
-string mr_format1(pairinfo_st &bp)
+string mr_format1(pairinfo_st &ibp)
 {
   std::stringstream ss;
+  pairinfo_st bp=ibp;
   
   string RNAME="chr";
   if ( bp.tid>=0 && bp.tid<(int)msc::bam_target_name.size() )
     RNAME=msc::bam_target_name[bp.tid];
-  int F2=bp.MS_F2;
-  int R1=bp.MS_R1;
-  string TYPE= F2 < R1 ? "DEL" : "DUP";
-  if ( F2>R1 ) swap (F2,R1);
+  string TYPE= bp.MS_F2 < bp.MS_R1 ? "DEL" : "DUP";
+  int len=bp.MS_R1-bp.MS_F2;
+  if ( bp.MS_F2>bp.MS_R1 ) {
+    swap (bp.MS_F2, bp.MS_R1);
+    swap (bp.MS_F2_rd, bp.MS_R1_rd);
+    swap (bp.F2_sr, bp.R1_sr);
+  }
   
   ss << RNAME << " " 
-     << F2+1 << " " 
-     << R1+1 << " " 
+     << bp.MS_F2+1 << " " 
+     << bp.MS_R1+1 << " " 
      << TYPE << " "
-     << bp.MS_R1-bp.MS_F2 << " "
+     << len << " "
      << "UN:" << bp.un << " "
      << "MD:"
      << bp.MS_F2_rd << ";"
@@ -467,7 +473,69 @@ int usage_match_MS_SM_reads(int argc, char* argv[]) {
        << "     fast processing of high coverage whole genome data. The range of reads\n"
        << "     matching can be overwritten by the -L INT option.\n"
        << "\nOutput:\n"
-       << "     Please refer to https://github.com/yhwu/matchclips2"
+       << "  1. CHROM\n"
+       << "  2. BEGIN, lower position on reference, 1 based\n"
+       << "  3. END,  higher position on reference, 1 based\n"
+       << "  4. DEL or DUP\n"
+       << "     The break points are either DEL or DUP, which does not necessarily\n"
+       << "     mean deletion or duplication. For example, a translocation will give\n"
+       << "     both types of break points, but no copy number change. DEL or DUP\n"
+       << "     simply indicate whether the 5' break points is lower or lower than \n"
+       << "     the 3' break point on the reference\n"
+       << "  5. LENGTH = 3' break point - 5' break point\n"
+       << "  6. UN:n\n"
+       << "     Sometimes, moving both break points simutanneously will not change\n"
+       << "     the variation sequence due to repeats in the reference. This number\n"
+       << "     tells how many bases are repeated at the two break points. please\n"
+       << "     refer to the paper for clarification.\n"
+       << "  7. RD:n1;n2;n3:s read depth information\n"
+       << "     n1: the read depth to the left side of the lower break point\n"
+       << "     n2: the read depth to the right side of the higher break point\n"
+       << "     n3: the read depth between the break points\n"
+       << "      s: score of read depth\n"
+       << "          0, not likely,\n"
+       << "          1, likely,\n" 
+       << "          2, very likely,\n"
+       << "          3, very strong signal,\n" 
+       << "          4, maybe a double deletion.\n"
+       << "  8. RP:n1;n2;n3:s read pair information\n"
+       << "     n1: reads properly paired across 5' break point\n"
+       << "     n2: reads properly paired across 3' break point\n"
+       << "     n3: reads that properly envelope 5' and 3' break points\n"
+       << "      s: score of read depth\n"
+       << "          0, not likely,\n"
+       << "          1, likely,\n" 
+       << "          2, very likely,\n"
+       << "          3, very strong signal,\n" 
+       << "     note: Envelope means the read pair starts on a position lower than\n"
+       << "           the 5' break point and ends on a position higher than the 3'\n"
+       << "           break point;\n"
+       << "           Properly means after taking the variation into consideration,\n"
+       << "           the read pair template is normally lengthed( +- 5 s.d. ) like\n"
+       << "           other properly paired reads.\n"
+       << "  9. MR:n1;n2;n3:s matching reads information\n"
+       << "     n1: reads on 5' side that match reads on 3' side\n"
+       << "     n2: reads on 3' side that match reads on 5' side\n"
+       << "     n3: average edit distance between the merged reads and the corresponding\n"
+       << "         reference,\n"
+       << "      s: score of read depth\n"
+       << "          0, not likely,\n"
+       << "          1, likely,\n" 
+       << "          2, very likely,\n"
+       << "          3, very strong signal.\n" 
+       << " 10. SR:n1;n2 matching softclipped reads information\n"
+       << "     n1: averaged edit distance\n"
+       << "     n2: number of pairs that match, e.g., if 3 reads on 5' side match 4\n"
+       << "         reads on 3' side, this number will be 12.\n"
+       << " 11. Q0:n1;n2 low map quality percentage\n"
+       << "     n1: percentage of mapq==0\n"
+       << "     n2: percentage of mapq<=10\n"
+       << "  Note: Any negative number means the field is not calculated.\n"
+       << "        If length of variation is shorted than 7 s.d., read pair information\n"
+       << "        should not be considered seriously.\n"
+       << "        Along the main output file, $output.weak contains CNVs of weaker\n"
+       << "        signal.\n"
+       << "\nReference: doi: 10.3389/fgene.2013.00157"
        << endl;
   
   return(0);
