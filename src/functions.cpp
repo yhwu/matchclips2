@@ -767,6 +767,8 @@ void check_github_update(string compiledTime, string gitupdate)
     pclose(pipe);
   }
   
+  if ( gittime==0 ) gittime=compiled;
+
   /*
   cerr << tm1.tm_year << " "
        << tm1.tm_mon << " "
