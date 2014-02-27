@@ -11,10 +11,21 @@
 #include <vector>
 #include <unistd.h>
 #include <assert.h>
-#include "functions.h"
-#include "samfunctions.h"
-#include "matchreads.h"
+//#include "functions.h"
+//#include "matchreads.h"
 using namespace std;
+
+#include "samfunctions.h"
+
+template <class T>
+static inline std::string to_string (const T& t)
+{
+  std::stringstream ss;
+  ss << t;
+  return ss.str();
+}
+
+
 
 static inline int is_overlap(uint32_t beg, uint32_t end, const bam1_t *b)
 {
@@ -276,7 +287,7 @@ void resolve_cigar_pos(const bam1_t *b,  POSCIGAR_st& m, int base)
 	 << endl;
     cerr << get_qseq(b) << "\n"
 	 << get_cigar(b) << endl;
-    cerr << bam_format1(msc::fp_in->header, b)  << endl;
+    //cerr << bam_format1(msc::fp_in->header, b)  << endl;
 	
   }
   
@@ -286,7 +297,7 @@ void resolve_cigar_pos(const bam1_t *b,  POSCIGAR_st& m)  {
   resolve_cigar_pos(b,  m, 1);
 }
 
-void resolve_cigar_string(int POS, string& CIGAR, POSCIGAR_st& m)  
+void resolve_cigar_pos(int POS, string& CIGAR, POSCIGAR_st& m)  
 {  
   if ( CIGAR=="*" ) { m.pos=0; return; }
   
@@ -301,8 +312,7 @@ void resolve_cigar_string(int POS, string& CIGAR, POSCIGAR_st& m)
   m.nop.resize(0);
   m.l_qseq=0;
   
-  int i,k;
-  for(i=0, k=0; i<(int)CIGAR.size(); ++i) {
+  for(int i=0, k=0; i<(int)CIGAR.size(); ++i) {
     if ( CIGAR[i]>='0' && CIGAR[i]<='9'  ) {
       numchar[k]=CIGAR[i];
       ++k;
@@ -311,7 +321,10 @@ void resolve_cigar_string(int POS, string& CIGAR, POSCIGAR_st& m)
     else {
       if ( CIGAR[i]=='*' ) { m.pos=0; return; }
       size_t cigar_num=ops.find(CIGAR[i]);
-      if ( cigar_num==string::npos) { cerr << "CIGAR error" << CIGAR << endl; exit(0); }
+      if ( cigar_num==string::npos) { 
+	cerr << "CIGAR error" << CIGAR << endl; 
+	exit(0); 
+      }
       numchar[k]=0;
       m.op.push_back(cigar_num);
       m.nop.push_back(atoi(numchar));
@@ -324,7 +337,7 @@ void resolve_cigar_string(int POS, string& CIGAR, POSCIGAR_st& m)
   
   int ns=0;
   uint32_t end=0; //position on seq 0-based
-  for (k = 0; k < (int)m.op.size(); ++k) {
+  for (int k = 0; k < (int)m.op.size(); ++k) {
     
     int op=m.op[k];
     int l=m.nop[k];
@@ -349,7 +362,7 @@ void resolve_cigar_string(int POS, string& CIGAR, POSCIGAR_st& m)
   //position on reference 1-based
   // BAM_CSOFT_CLIP is added because we need positions of S 
   end = m.pos;  //position on reference
-  for (k = m.anchor; k < (int)m.op.size(); ++k) {
+  for (int k = m.anchor; k < (int)m.op.size(); ++k) {
     m.cop[k]=end;
     if (  m.op[k] == BAM_CMATCH || 
 	  m.op[k] == BAM_CDEL || 
@@ -357,7 +370,7 @@ void resolve_cigar_string(int POS, string& CIGAR, POSCIGAR_st& m)
 	  m.op[k] == BAM_CSOFT_CLIP ) end += m.nop[k] ;
   }
   end = m.pos;
-  for (k = m.anchor-1; k >= 0; --k) {
+  for (int k = m.anchor-1; k >= 0; --k) {
     if (  m.op[k] == BAM_CMATCH || 
 	  m.op[k] == BAM_CDEL || 
 	  m.op[k] == BAM_CREF_SKIP || 

@@ -2,6 +2,7 @@
 #define _SAMFUNCTIONS_H
 
 /**** samtools headers ****/
+using namespace std;
 #include <string>
 #include <vector>
 #include <bam.h>
@@ -71,7 +72,7 @@ bam1_t *bam_shorten2(const bam1_t *src);
 
 void resolve_cigar_pos(const bam1_t *b,  POSCIGAR_st& m, int base);
 void resolve_cigar_pos(const bam1_t *b,  POSCIGAR_st& m);
-void resolve_cigar_string(int POS, std::string& CIGAR, POSCIGAR_st& m);
+void resolve_cigar_pos(int POS, string& CIGAR, POSCIGAR_st& m);
 
 int calibrate_resolved_cigar_pos(string& FASTA, string& SEQ, POSCIGAR_st& m);
 int calibrate_resolved_cigar_pos(string& FASTA, const bam1_t *b, POSCIGAR_st& m);

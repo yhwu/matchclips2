@@ -119,6 +119,7 @@ struct BREAKSEEK_st {        // describes break point discovery
   string INSEQ;         // inserted sequence for Insertion only
   string MERGE;         // sequence of merged reads
   string TAG;           // comment on cnv
+  string RNAME;
   BREAKSEEK_st():tid(-9),
 		 P1(0),
 		 P2(0),

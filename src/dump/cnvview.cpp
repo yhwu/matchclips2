@@ -10,7 +10,6 @@
 #include <algorithm>
 #include <vector>
 #include <unistd.h>
-#include "color.h"
 using namespace std;
 
 /**** user samtools headers ****/
@@ -21,7 +20,7 @@ using namespace std;
 #include "readref.h"
 #include "read_CIGAR.h"
 #include "filters.h"
-#include "matchreads.h"
+#include "cnvview.h"
 
 vector<string> BREAKSEEK_st::TARGET;
 map<string, int> BREAKSEEK_st::RNAMEINT;

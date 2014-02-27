@@ -746,16 +746,16 @@ void check_github_update(string compiledTime, string gitupdate)
        << tm1.tm_min << " "
        << tm1.tm_sec << endl;
   */
-
+  
   string cmd="curl --max-time 3 " + gitupdate + " 2>/dev/null";
   FILE* pipe = popen(cmd.c_str(), "r");
   if (pipe) {
     fgetline(pipe, updatedTime);
     if ( strptime(updatedTime.c_str(), "%a %b %d %H:%M:%S %Y", &tm1)!=NULL )
-       gittime=mktime(&tm1);
+      gittime=mktime(&tm1);
   }
   pclose(pipe);
-
+  
   if ( gittime==0 ) {
     cmd="wget --timeout=3 -O - " + gitupdate + " 2>/dev/null";
     pipe = popen(cmd.c_str(), "r");
@@ -767,8 +767,6 @@ void check_github_update(string compiledTime, string gitupdate)
     pclose(pipe);
   }
   
-  if ( gittime==0 ) gittime=compiled;
-
   /*
   cerr << tm1.tm_year << " "
        << tm1.tm_mon << " "
@@ -777,12 +775,13 @@ void check_github_update(string compiledTime, string gitupdate)
        << tm1.tm_min << " "
        << tm1.tm_sec << endl;
   */
-
-  /*
-  cerr << compiledTime << "\t" << compiled << "\n"
-       << updatedTime << "\t" << gittime << endl
-       << difftime(gittime, compiled) << endl;
-  */
+  
+  
+  //cerr << compiledTime << "\t" << compiled << "\n"
+  //   << updatedTime << "\t" << gittime << endl
+  //   << difftime(gittime, compiled) << endl;
+  
+  if ( gittime==0 ) gittime=compiled;
 
   if ( compiled != gittime ) {
     if ( compiled < gittime ) 
