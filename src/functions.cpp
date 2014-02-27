@@ -735,6 +735,8 @@ void check_github_update(string compiledTime, string gitupdate)
   time_t compiled=0, gittime=0;
   struct tm tm1;
   
+  mktime(&tm1);
+  
   if ( strptime(compiledTime.c_str(), "%a %b %d %H:%M:%S %Y", &tm1)!=NULL )
     compiled=mktime(&tm1);
 
@@ -758,9 +760,14 @@ void check_github_update(string compiledTime, string gitupdate)
     pclose(pipe);
   }
   
-  // cerr << compiledTime << "\t" << compiled << "\n"
-  //   << updatedTime << "\t" << gittime << endl
-  //   << difftime(gittime,compiled) << endl;
+  cerr << compiledTime << "\t" << compiled << "\n"
+       << updatedTime << "\t" << gittime << endl
+       << difftime(gittime, compiled) << endl;
+  
+  if ( compiledTime != updatedTime ) {
+    cerr << compiledTime << "\n" << updatedTime << endl;
+  }
+  
   if ( compiled != gittime ) {
     if ( compiled < gittime ) 
       cerr << "matchclips is updated at github on " << updatedTime << " UTC\n"

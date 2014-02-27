@@ -28,7 +28,7 @@ using namespace std;
 #include "functions.h"
 
 #ifndef _BUILD_TIME
-#define _BUILD_TIME string(__DATE__)+" "+string(__TIME__);
+#define _BUILD_TIME "Thu Feb 27 03:37:31 2014"
 #endif
 
 void match_MS_SM_reads(int argc, char* argv[]);

@@ -4,7 +4,7 @@ SAMTOOLS = samtools-0.1.19
 all: $(PROGRAMS)
 TITLE = matchclip2
 CC = g++
-CFLAGS = -g -O2 -D_BUILD_TIME="\"`cat UPDATED`\"" -Wall -L/usr/lib64
+CFLAGS = -g -O2  -Wall -L/usr/lib64
 #CFLAGS = -g -Wall -L/usr/lib64
 INC=-I${SAMTOOLS}
 LIBS =  -L${SAMTOOLS} -lbam -pthread -lm -lz
@@ -42,6 +42,9 @@ SIMBPHDR = $(SIMBPCXX:.cpp=.h)
 SIMBPOBJ = $(SIMBPCXX:.cpp=.o)	wgsim.o
 simbp : $(SIMBPOBJ) $(SIMBPCXX) $(SIMBPHDR) wgsim.c kseq.h Makefile
 	$(CC) $(CFLAGS) $(SIMBPOBJ) -lm -lz -o $@
+
+matchreadsmain.o: matchreadsmain.cpp matchreadsmain.h UPDATED
+	$(CC)  $(INC) $(CFLAGS) -D_BUILD_TIME="\"`cat UPDATED`\"" -c $< -o $@
 
 .cpp.o:  %.o: %.cpp %.h
 	$(CC)  $(INC) $(CFLAGS) -c $< -o $@
