@@ -735,39 +735,53 @@ void check_github_update(string compiledTime, string gitupdate)
   time_t compiled=0, gittime=0;
   struct tm tm1;
   
-  mktime(&tm1);
-  
   if ( strptime(compiledTime.c_str(), "%a %b %d %H:%M:%S %Y", &tm1)!=NULL )
-    compiled=mktime(&tm1);
+    compiled=mktime(&tm1); 
+  
+  /*
+  cerr << tm1.tm_year << " "
+       << tm1.tm_mon << " "
+       << tm1.tm_mday << " "
+       << tm1.tm_hour << " "
+       << tm1.tm_min << " "
+       << tm1.tm_sec << endl;
+  */
 
   string cmd="curl --max-time 3 " + gitupdate + " 2>/dev/null";
   FILE* pipe = popen(cmd.c_str(), "r");
   if (pipe) {
     fgetline(pipe, updatedTime);
     if ( strptime(updatedTime.c_str(), "%a %b %d %H:%M:%S %Y", &tm1)!=NULL )
-      gittime=mktime(&tm1);
+       gittime=mktime(&tm1);
   }
   pclose(pipe);
-  
+
   if ( gittime==0 ) {
     cmd="wget --timeout=3 -O - " + gitupdate + " 2>/dev/null";
     pipe = popen(cmd.c_str(), "r");
     if (pipe) {
       fgetline(pipe, updatedTime);
       if ( strptime(updatedTime.c_str(), "%a %b %d %H:%M:%S %Y", &tm1)!=NULL )
-	gittime=mktime(&tm1);
+	gittime=mktime(&tm1); 
     }
     pclose(pipe);
   }
   
+  /*
+  cerr << tm1.tm_year << " "
+       << tm1.tm_mon << " "
+       << tm1.tm_mday << " "
+       << tm1.tm_hour << " "
+       << tm1.tm_min << " "
+       << tm1.tm_sec << endl;
+  */
+
+  /*
   cerr << compiledTime << "\t" << compiled << "\n"
        << updatedTime << "\t" << gittime << endl
        << difftime(gittime, compiled) << endl;
-  
-  if ( compiledTime != updatedTime ) {
-    cerr << compiledTime << "\n" << updatedTime << endl;
-  }
-  
+  */
+
   if ( compiled != gittime ) {
     if ( compiled < gittime ) 
       cerr << "matchclips is updated at github on " << updatedTime << " UTC\n"
