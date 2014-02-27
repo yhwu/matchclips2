@@ -20,7 +20,7 @@ tagcnv : $(TAGOBJ) $(TAGCXX) $(TAGHDR) Makefile
 	$(CC) $(CFLAGS) $(TAGOBJ)  -o $@
 
 MATCHCXX =  matchreadsmain.cpp matchreads.cpp preprocess.cpp exhaustive.cpp pairguide.cpp  samfunctions.cpp readref.cpp functions.cpp
-MATCHHDR = color.h $(MATCHCXX:.cpp=.h)	
+MATCHHDR = $(MATCHCXX:.cpp=.h)	
 MATCHOBJ = $(MATCHCXX:.cpp=.o)	
 matchclips : $(MATCHOBJ) $(MATCHCXX) $(MATCHHDR) Makefile ./${SAMTOOLS}/libbam.a
 	$(CC) $(CFLAGS) $(MATCHOBJ) $(INC) $(LIBS) -o $@

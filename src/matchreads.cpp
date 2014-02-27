@@ -12,7 +12,6 @@
 #include <string>
 #include <vector>
 #include <unistd.h>
-#include "color.h"
 using namespace std;
 
 /**** user samtools headers ****/
