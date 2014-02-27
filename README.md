@@ -47,9 +47,9 @@ Please cite MATCHCLIPS by ```doi: 10.3389/fgene.2013.00157```.
           4, maybe double deletion.
      note: dx=2*(END-NEGIN), l_qseq < dx < 4*l_qseq
   8. RP:n1;n2;n3:s read pair information
-     n1: reads properly paired across BEGIN
-     n2: reads properly paired across END
-     n3: reads that properly envelope 5' and 3' break points
+     n1: normal pairs across BEGIN
+     n2: normal pairs across END
+     n3: pairs that properly envelope 5' and 3' break points
       s: strength of signal
           0, not likely,
           1, kind of,
