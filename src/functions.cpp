@@ -764,6 +764,7 @@ void check_github_update(string compiledTime, string gitupdate)
   if ( compiled != gittime ) {
     if ( compiled < gittime ) 
       cerr << "matchclips is updated at github on " << updatedTime << " UTC\n"
+	   << "your version was stamped " << compiledTime << " UTC\n"
 	   << "please download from https://github.com/yhwu/matchclips2\n"
 	   << endl; 
     else 
