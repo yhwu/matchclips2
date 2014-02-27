@@ -4,7 +4,7 @@ SAMTOOLS = samtools-0.1.19
 all: $(PROGRAMS)
 TITLE = matchclip2
 CC = g++
-CFLAGS = -g -O2 -D_BUILD_TIME="\"`date -u`\"" -Wall -L/usr/lib64
+CFLAGS = -g -O2 -D_BUILD_TIME="\"`cat UPDATED`\"" -Wall -L/usr/lib64
 #CFLAGS = -g -Wall -L/usr/lib64
 INC=-I${SAMTOOLS}
 LIBS =  -L${SAMTOOLS} -lbam -pthread -lm -lz
@@ -24,7 +24,9 @@ MATCHHDR = color.h $(MATCHCXX:.cpp=.h)
 MATCHOBJ = $(MATCHCXX:.cpp=.o)	
 matchclips : $(MATCHOBJ) $(MATCHCXX) $(MATCHHDR) Makefile ./${SAMTOOLS}/libbam.a
 	$(CC) $(CFLAGS) $(MATCHOBJ) $(INC) $(LIBS) -o $@
-	date -u > UPDATED
+
+time:
+	date -u "+%a %b %d %H:%M:%S %Y" > UPDATED
 
 CNVVIEWCXX =  cnvview.cpp filters.cpp samfunctions.cpp readref.cpp functions.cpp
 CNVVIEWHDR = matchreads.h $(CNVVIEWCXX:.cpp=.h)	
