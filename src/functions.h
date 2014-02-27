@@ -96,6 +96,6 @@ inline std::string to_string (const T& t)
   return ss.str();
 }
 
-void check_github_update(string& compiledtime, string & updatefile);
+void check_github_update(string compiledtime, string updatefile);
 
 #endif

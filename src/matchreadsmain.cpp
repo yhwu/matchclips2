@@ -39,9 +39,10 @@ int main(int argc, char* argv[])
   int pid = getpid();
   
   string build_time= _BUILD_TIME;
-  cerr << build_time << endl;
   string updateFile="https://raw.github.com/yhwu/matchclips2/master/src/UPDATED";
-  check_github_update(build_time, updateFile);
+  //  check_github_update(build_time, updateFile);
+  check_github_update(_BUILD_TIME, 
+		      "https://raw.github.com/yhwu/matchclips2/master/src/UPDATED");
   
   exit(0);
   

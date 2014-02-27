@@ -729,7 +729,7 @@ void runmed(unsigned short int* y, unsigned short int* smo, int n, int band)
 { Srunmed(y, smo, n, band, 0, 0); }
 
 
-void check_github_update(string & compiledTime, string & gitupdate)
+void check_github_update(string compiledTime, string gitupdate)
 {
   string updatedTime="NULL";
   time_t compiled=0, gittime=0;
@@ -738,44 +738,39 @@ void check_github_update(string & compiledTime, string & gitupdate)
   if ( strptime(compiledTime.c_str(), "%a %b %d %H:%M:%S %Y", &tm1)!=NULL )
     compiled=mktime(&tm1);
 
-  string cmd="curll --max-time 3 " + gitupdate + " 2>/dev/null";
+  string cmd="curl --max-time 3 " + gitupdate + " 2>/dev/null";
   FILE* pipe = popen(cmd.c_str(), "r");
   if (pipe) {
-    cerr << cmd << endl;
     fgetline(pipe, updatedTime);
     if ( strptime(updatedTime.c_str(), "%a %b %d %H:%M:%S %Y", &tm1)!=NULL )
       gittime=mktime(&tm1);
   }
   pclose(pipe);
-  cerr << updatedTime << endl;
   
   if ( gittime==0 ) {
     cmd="wget --timeout=3 -O - " + gitupdate + " 2>/dev/null";
     pipe = popen(cmd.c_str(), "r");
     if (pipe) {
-      cerr << cmd << endl;
       fgetline(pipe, updatedTime);
+      if ( strptime(updatedTime.c_str(), "%a %b %d %H:%M:%S %Y", &tm1)!=NULL )
+	gittime=mktime(&tm1);
     }
     pclose(pipe);
-    if ( strptime(updatedTime.c_str(), "%a %b %d %H:%M:%S %Y", &tm1)!=NULL )
-      gittime=mktime(&tm1);
-    cerr << updatedTime << endl;
   }
   
-  cerr << compiledTime << "\t" << compiled << "\n"
-       << updatedTime << "\t" << gittime << endl;
-
-  cerr << difftime(gittime,compiled) << endl;
-  if ( compiled < gittime ) {
-    cerr << "matchclips is updated at github on " << updatedTime << "\n"
-	 << "please download from https://github.com/yhwu/matchclips2\n"
-	 << endl; 
-  }
-  else {
-    cerr << "You are working on the latest version. After done, please update with\n"
-	 << "make time\n"
-	 << "and push to github\n"
-	 << endl;
+  // cerr << compiledTime << "\t" << compiled << "\n"
+  //   << updatedTime << "\t" << gittime << endl
+  //   << difftime(gittime,compiled) << endl;
+  if ( compiled != gittime ) {
+    if ( compiled < gittime ) 
+      cerr << "matchclips is updated at github on " << updatedTime << " UTC\n"
+	   << "please download from https://github.com/yhwu/matchclips2\n"
+	   << endl; 
+    else 
+      cerr << "You are working on the latest version. After done, please update with\n"
+	   << "make time\n"
+	   << "and push to github\n"
+	   << endl;
   }
 
   return;
