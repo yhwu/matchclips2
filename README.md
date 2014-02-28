@@ -116,7 +116,7 @@ Options:
 CNV=$BAM.mc
 awk '{OFS="\t"; print $1,$2,$3,0,0,$0}' $CNV > $CNV.anno_input
    
-$ANNOVAR/table_annovar.pl $CNVANNO $ANNOVAR/humandb/ -buildver hg19 -out $CNV.anno -remove -protocol refGene,phastConsElements46way,genomicSuperDups,esp6500si_all,1000g2012apr_all,snp135,ljb2_all -operation g,r,r,f,f,f,f -nastring NA -csvout 
+$ANNOVAR/table_annovar.pl $CNV.anno_input $ANNOVAR/humandb/ -buildver hg19 -out $CNV.anno -remove -protocol refGene,phastConsElements46way,genomicSuperDups,esp6500si_all,1000g2012apr_all,snp135,ljb2_all -operation g,r,r,f,f,f,f -nastring NA -csvout 
     
 append_anno.pl $CNV $CNV.anno.hg19_multianno.csv > $CNV.anno
     
