@@ -167,7 +167,7 @@ string cnv_format1(pairinfo_st &bp1)
      << "RP:"
      << bp.F2_rp << ";"
      << bp.R1_rp << ";"
-     << bp.pair_count << ":"
+     << bp.FRrp << ":"
      << bp.rpscore << "\t"
      << "MR:"
      << bp.F2_sr << ";"
@@ -296,6 +296,156 @@ void write_ED_st_to_file(vector<ED_st>& ed, string fn)
   FOUT.flush();
   return;
 }
+
+void remove_N_regions(string& fasta, vector<pairinfo_st>& bp)
+{
+  vector<int> N_beg(0), N_end(0);
+  get_N_regions(fasta, N_beg, N_end);
+  for(int i=bp.size()-1; i>=0; --i) {
+    int F2=bp[i].F2;
+    int R1=bp[i].R1;
+    if ( F2>R1 ) swap(F2, R1);
+    
+    bool is_N=false;
+    for(size_t k=0; k<N_beg.size(); ++k) {
+      int r1=max(N_beg[k], F2);
+      int r2=min(N_end[k], R1);
+      if ( r2-r1 > (R1-F2)/3 ) { is_N=true; break; }
+    }
+    
+    if ( is_N && bp[i].rdscore>=1 ) bp.erase( bp.begin()+i );
+  }
+  
+  return;
+}
+
+
+void finalize_output(vector<pairinfo_st>& bp, 
+		     vector<pairinfo_st>& strong, 
+		     vector<pairinfo_st>& weak) 
+{
+  strong.clear();
+  weak.clear();
+  if ( bp.size() < 1 ) return;
+  
+  for(size_t i=1; i<bp.size(); ++i) cerr << cnv_format1(bp[i]) << endl;
+  
+  // remove duplicated 
+  for(size_t i=1; i<bp.size(); ++i) {
+    if ( bp[i].F2==bp[i-1].F2 && bp[i].R1==bp[i-1].R1 ) {
+      int ikeep=i;
+      
+      ikeep = bp[i-1].sr_count > bp[i].sr_count ? i-1 : i;
+      bp[i].un=bp[ikeep].un;
+      bp[i].sr_ed=bp[ikeep].sr_ed;
+      bp[i].sr_count=bp[ikeep].sr_count;
+      
+      if ( bp[i-1].rdscore != bp[i].rdscore )
+	ikeep = bp[i-1].rdscore > bp[i].rdscore ? i-1 : i;
+      bp[i].F2_rd=bp[ikeep].F2_rd;
+      bp[i].R1_rd=bp[ikeep].R1_rd;
+      bp[i].rd=bp[ikeep].rd;
+      bp[i].rdscore=bp[ikeep].rdscore;
+      
+      if ( bp[i-1].rpscore != bp[i].rpscore )
+	ikeep = bp[i-1].rpscore > bp[i].rpscore ? i-1 : i;
+      bp[i].F2_rp=bp[ikeep].F2_rp;
+      bp[i].R1_rp=bp[ikeep].R1_rp;
+      bp[i].FRrp=bp[ikeep].FRrp;
+      bp[i].rpscore=bp[ikeep].rpscore;
+      
+      if ( bp[i-1].srscore != bp[i].srscore )
+	ikeep = bp[i-1].srscore > bp[i].srscore ? i-1 : i;
+      bp[i].F2_sr=bp[ikeep].F2_sr;
+      bp[i].R1_sr=bp[ikeep].R1_sr;
+      bp[i].MS_ED=bp[ikeep].MS_ED;
+      bp[i].MS_ED_count=bp[ikeep].MS_ED_count;
+      bp[i].srscore=bp[ikeep].srscore;
+      
+      bp[i-1].sr_count=-9;
+      bp[i-1].rdscore=bp[i-1].rpscore=bp[i-1].srscore=-1;
+    }
+  }
+  
+  // decide signal strength
+  for(size_t i=0; i<bp.size(); ++i) {
+    if ( bp[i].sr_count==-9 ) continue;
+    
+    // to discard
+    if ( bp[i].rdscore<=0 && 
+	 bp[i].rpscore<=0 &&
+	 bp[i].srscore<=0 &&
+	 bp[i].sr_count<=3 ) continue;
+    
+    if ( bp[i].rdscore<=0 && 
+	 bp[i].rpscore<=0 &&
+	 bp[i].srscore<=0 &&
+	 bp[i].un>=msc::minOverlap &&
+	 bp[i].un>=abs(bp[i].F2-bp[i].R1) ) continue;
+    
+    // RD and RP signal
+    // if ( bp[i].rdscore>0 || bp[i].rpscore>0 ) {
+    // strong.push_back( bp[i] );
+    // continue;
+    //}
+    // combined score >=2
+    if ( max(0, bp[i].rpscore)+
+	 max(0, bp[i].rdscore)+
+	 max(0, bp[i].srscore) >=2 ) {
+      strong.push_back( bp[i] );
+      continue;
+    }
+    
+    // short CNV, strong SR signal
+    if ( bp[i].rpscore<0 &&
+	 bp[i].srscore>2 &&
+	 bp[i].un< (float)msc::minOverlap*1.5  ) {
+      strong.push_back( bp[i] );
+      continue;
+    }
+    if ( abs(bp[i].F2-bp[i].R1)<msc::bam_pe_insert_sd*5 &&
+	 bp[i].srscore>2 &&
+	 bp[i].un< (float)msc::minOverlap*1.5  ) {
+      strong.push_back( bp[i] );
+      continue;
+    }
+    
+    
+    // strong softclips signal
+    int medRD=(bp[i].F2_rd +  bp[i].R1_rd)/2;
+    double expected_pairs= (double)medRD * 0.5 * 0.5 *
+      (1.0 -(double)msc::minOverlap/(double)msc::bam_l_qseq ) *
+      (1.0 - 2.0*(double)msc::minSNum/(double)msc::bam_l_qseq );
+    if ( expected_pairs<20 ) expected_pairs=20;
+    if ( bp[i].un< (float)msc::minOverlap*1.5 && 
+	 bp[i].sr_count>=expected_pairs ) {
+      strong.push_back( bp[i] );
+      continue;
+    }
+    
+    if ( bp[i].sr_count<3 && abs(bp[i].F2-bp[i].R1)<=bp[i].un ) continue;
+    
+    weak.push_back( bp[i] );
+  }
+  
+  for(int i=strong.size()-1; i>=0; --i) {
+    bool is_weak=false;
+    
+    if ( strong[i].rdscore<=0 && strong[i].rpscore==0 &&
+	 abs(strong[i].F2-strong[i].R1) > msc::bam_pe_insert_sd*7 ) is_weak=true;
+    
+    if ( strong[i].rdscore<=0 && strong[i].rpscore==0 &&
+	 strong[i].un*2>msc::bam_l_qseq ) is_weak=true;
+    
+    if ( is_weak ) {
+      weak.push_back(strong[i]);
+      strong.erase(strong.begin()+i);
+    }
+  }
+  
+  return;
+}
+
 
 void get_pairend_info(int ref, int beg, int end)
 {
@@ -648,6 +798,7 @@ void match_MS_SM_reads(int argc, char* argv[])
     sort(pairbp_mc.begin(), pairbp_mc.end(), sort_pair_info);
     
     vector<pairinfo_st> strong, weak;
+    remove_N_regions(FASTA, pairbp_mc);
     finalize_output(pairbp_mc, strong, weak);    
     sort(strong.begin(), strong.end(), sort_pair_info_output);
     sort(weak.begin(), weak.end(), sort_pair_info_output);

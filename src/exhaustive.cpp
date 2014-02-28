@@ -645,14 +645,16 @@ void exhaustive_search(vector<bam1_t>& b_MS, vector<bam1_t>& b_SM,
   vector<bam1_t> (0).swap(b_MS);
   vector<bam1_t> (0).swap(b_SM);
   
+  // increase overlap length
   int old_minOverlap = msc::minOverlap;
   msc::minOverlap += msc::minOverlapPlus;  
+  
   for(int i=0; i<(int)mcbp.size(); ++i) {
     pairinfo_st ibp=mcbp[i];
     
     stat_region(ibp, FASTA, msc::bam_l_qseq);
     assess_rd_rp_sr_infomation(ibp);
-    mcbp[i]=ibp;
+    mcbp[i]=ibp;    // update rd rp info
     
     // good signal pass
     if ( mcbp[i].rdscore>=2 && mcbp[i].rpscore>=2 ) continue;
@@ -665,14 +667,16 @@ void exhaustive_search(vector<bam1_t>& b_MS, vector<bam1_t>& b_SM,
     cerr << "checking: " << cnv << endl;
     match_reads_for_pairs(ibp, FASTA, -1, true);
     assess_rd_rp_sr_infomation(ibp);
-    mcbp[i]=ibp;
+    mcbp[i]=ibp; // update mr info
     
     if ( ibp.F2_sr>1 && ibp.R1_sr>1 ) {
       // if MR found, checked new matched
-      ibp.F2=ibp.MS_F2;
-      ibp.R1=ibp.MS_R1;
-      stat_region(ibp, FASTA, msc::bam_l_qseq);
-      assess_rd_rp_sr_infomation(ibp);
+      if ( ibp.F2!=ibp.MS_F2 || ibp.R1!=ibp.MS_R1 ) {
+	ibp.F2=ibp.MS_F2;
+	ibp.R1=ibp.MS_R1;
+	stat_region(ibp, FASTA, msc::bam_l_qseq);
+	assess_rd_rp_sr_infomation(ibp);
+      }
     }
     
     cnv=mr_format1(ibp);
@@ -695,6 +699,7 @@ void exhaustive_search(vector<bam1_t>& b_MS, vector<bam1_t>& b_SM,
     for(size_t t=0; t<cnv.size(); ++t) if (cnv[t]=='\t') cnv[t]=' ';
     cerr << "updated:  " << cnv << "\n" << endl;
   }
+  
   msc::minOverlap = old_minOverlap ;
   
   return;

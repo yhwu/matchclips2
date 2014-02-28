@@ -2,11 +2,11 @@ PROGRAMS = matchclips tagcnv
 SAMTOOLS = samtools-0.1.19
 all: $(PROGRAMS)
 TITLE = matchclip2
-CC = g++
-CFLAGS = -g -O2  -Wall -L/usr/lib64
+CC =g++
+CFLAGS =-g -Wall -O2 
 #CFLAGS = -g -Wall -L/usr/lib64
 INC=-I${SAMTOOLS}
-LIBS =  -L${SAMTOOLS} -lbam -pthread -lm -lz
+LIBS =   -L/usr/lib64 -L${SAMTOOLS} -lbam -pthread -lm -lz
 BACKUPDIR = ~/projects/$(strip $(TITLE))
 BACKUPLOG = $(strip $(BACKUPDIR)/$(TITLE)).log
 STAMP = $(strip $(shell  date +'%Y.%m.%d-%H.%M.%S'))
@@ -27,29 +27,17 @@ matchclips : $(MATCHOBJ) $(MATCHCXX) $(MATCHHDR) Makefile ./${SAMTOOLS}/libbam.a
 time:
 	date -u "+%a %b %d %H:%M:%S %Y" > UPDATED
 
-CNVVIEWCXX =  cnvview.cpp filters.cpp samfunctions.cpp readref.cpp functions.cpp
-CNVVIEWHDR = matchreads.h $(CNVVIEWCXX:.cpp=.h)	
-CNVVIEWOBJ = $(CNVVIEWCXX:.cpp=.o)	
-cnvview : $(CNVVIEWOBJ) $(CNVVIEWCXX) $(CNVVIEWHDR) Makefile ./${SAMTOOLS}/libbam.a
-	$(CC) $(CFLAGS) $(CNVVIEWOBJ) $(INC) $(LIBS) -o $@
-
-./${SAMTOOLS}/libbam.a :
+./${SAMTOOLS}/libbam.a:
 	cd ${SAMTOOLS} && make libbam.a
 
-SIMBPCXX =  simbp.cpp readref.cpp 
-SIMBPHDR = $(SIMBPCXX:.cpp=.h)	
-SIMBPOBJ = $(SIMBPCXX:.cpp=.o)	wgsim.o
-simbp : $(SIMBPOBJ) $(SIMBPCXX) $(SIMBPHDR) wgsim.c kseq.h Makefile
-	$(CC) $(CFLAGS) $(SIMBPOBJ) -lm -lz -o $@
-
 matchreadsmain.o: matchreadsmain.cpp matchreadsmain.h UPDATED
-	$(CC)  $(INC) $(CFLAGS) -D_BUILD_TIME="\"`cat UPDATED`\"" -c $< -o $@
+	$(CC) -c $(CFLAGS) $(INC) -D_BUILD_TIME="\"`cat UPDATED`\"" $< -o $@
 
 .cpp.o:  %.o: %.cpp %.h
-	$(CC)  $(INC) $(CFLAGS) -c $< -o $@
+	$(CC) -c $(CFLAGS) $(INC) $< -o $@
 
 .c.o:  %.o: %.c %.h
-	gcc -O2 -c $< -o $@
+	gcc -c -wall -O2 $< -o $@
 
 
 clean : 

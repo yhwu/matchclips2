@@ -320,13 +320,13 @@ void stat_and_filter_pair_group(vector<intpair_st>& bpi, vector<pairinfo_st>& bp
   
   vector<pairinfo_st> bp(0);
   for(size_t i=0; i<bpi.size(); ++i) {
-    if ( bpi[i].pair_count<=5 ) continue;
+    if ( bpi[i].FRrp<=5 ) continue;
     pairinfo_st ibpinfo;
     ibpinfo.F2=bpi[i].F2;
     ibpinfo.F2_acurate=bpi[i].F2_acurate;
     ibpinfo.R1=bpi[i].R1;
     ibpinfo.R1_acurate=bpi[i].R1_acurate;
-    ibpinfo.pair_count=bpi[i].pair_count;
+    ibpinfo.FRrp=bpi[i].FRrp;
     
     bp.push_back(ibpinfo);
   }
@@ -354,7 +354,7 @@ void stat_and_filter_pair_group(vector<intpair_st>& bpi, vector<pairinfo_st>& bp
   
   for(size_t i=0; i<bp.size(); ++i) {
     
-    if ( bp[i].pair_count<=minRP ) continue;
+    if ( bp[i].FRrp<=minRP ) continue;
     
     int dx = msc::bam_l_qseq*5;
     if ( dx/3 > abs(bp[i].F2-bp[i].R1) ) dx=abs(bp[i].F2-bp[i].R1)*3;
@@ -455,18 +455,18 @@ void kmean_pairgroup(vector<intpair_st>& pairs, vector<intpair_st>& bp)
 	ibp.R1_acurate=tmp[i].R1_acurate;
       }
     }
-    ibp.pair_count=tmp.size();
+    ibp.FRrp=tmp.size();
     bp.push_back(ibp);
   }
   
   // make sure all pairs counted
   for(int i=0; i<(int)bp.size(); ++i) {
-    good_pair_count-=bp[i].pair_count;
+    good_pair_count-=bp[i].FRrp;
     if ( msc::verbose>1 )     
       cerr << "cluster identified " << i << "\t"
 	   << bp[i].F2_acurate << "\t" << bp[i].F2 << "\t"
 	   << bp[i].R1_acurate << "\t" << bp[i].R1 << "\t"
-	   << bp[i].pair_count << "\n" << endl;
+	   << bp[i].FRrp << "\n" << endl;
   }
   if ( good_pair_count != 0 ) 
     cerr << "not all pairs counted from the clusters" << endl;
@@ -517,25 +517,25 @@ void check_pair_group(vector<intpair_st>& pairs, vector<pairinfo_st>& bpinfo)
   
   // the above code counts reads
   // convert pair reads to pair templates
-  for(size_t i=0; i<bp.size(); ++i) bp[i].pair_count/=2;
+  for(size_t i=0; i<bp.size(); ++i) bp[i].FRrp/=2;
 
   // check read depth and filter
   for(size_t i=0; i<bp.size(); ++i) {
     
-    // if ( bp[i].pair_count<=minRP ) continue;
-    if ( bp[i].pair_count<=4 ) continue;
+    // if ( bp[i].FRrp<=minRP ) continue;
+    if ( bp[i].FRrp<=4 ) continue;
     
     pairinfo_st ibp;
     ibp.F2=bp[i].F2;
     ibp.F2_acurate=bp[i].F2_acurate;
     ibp.R1=bp[i].R1;
     ibp.R1_acurate=bp[i].R1_acurate;
-    ibp.pair_count=bp[i].pair_count;
+    ibp.FRrp=bp[i].FRrp;
     
     ibp.F2_rp=check_normalpairs_cross_pos(msc::bam_ref, ibp.F2); 
     ibp.R1_rp=check_normalpairs_cross_pos(msc::bam_ref, ibp.R1); 
     
-    if ( ibp.pair_count<=min(ibp.F2_rp, ibp.R1_rp)/16 ) continue;
+    if ( ibp.FRrp<=min(ibp.F2_rp, ibp.R1_rp)/16 ) continue;
     
     int dx = msc::bam_l_qseq*5;
     if ( dx/3 > abs(bp[i].F2-bp[i].R1) ) dx=abs(bp[i].F2-bp[i].R1)*3;
@@ -729,7 +729,7 @@ void match_reads_for_pairs(pairinfo_st& ipairbp, string& FASTA, int dx, bool poi
 	 << ipairbp.R1_acurate << " " << ipairbp.R1 << "\t"
 	 << ipairbp.R1-ipairbp.F2 << "\t"
 	 << "d " << ipairbp.F2_rd << " " << ipairbp.R1_rd << " " << ipairbp.rd << " " << ipairbp.rdscore << "\t"
-	 << "p " << ipairbp.F2_rp << " " << ipairbp.R1_rp << " " << ipairbp.pair_count << " " << ipairbp.rpscore << "\t"
+	 << "p " << ipairbp.F2_rp << " " << ipairbp.R1_rp << " " << ipairbp.FRrp << " " << ipairbp.rpscore << "\t"
 	 << "m " << ipairbp.MS_F2 << " " << ipairbp.MS_R1 << " "
 	 << ipairbp.F2_sr << " " << ipairbp.R1_sr << " " << ipairbp.MS_ED << " " << ipairbp.MS_ED_count
 	 << endl;

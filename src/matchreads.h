@@ -147,8 +147,8 @@ struct intpair_st {
   bool F2_acurate;
   int R1;
   bool R1_acurate;
-  int pair_count;
-  intpair_st(): F2(0), F2_acurate(0), R1(0), R1_acurate(0), pair_count(0) {};
+  int FRrp;
+  intpair_st(): F2(0), F2_acurate(0), R1(0), R1_acurate(0), FRrp(0) {};
 };
 bool sort_pair(const intpair_st& p1, const intpair_st& p2);
 bool sort_pair_len(const intpair_st& p1, const intpair_st& p2);
@@ -193,14 +193,14 @@ struct pairinfo_st {
   int rpscore; // score of 2 is considered convincing
   int rdscore; // score of 2 is considered convincing
   int srscore; // score of 2 is considered convincing
-  int pair_count; // at least >=6 (3 templates) to be considered 
+  int FRrp; // at least >=6 (3 templates) to be considered 
   int rd;         // read depth between F2 and R1 
   pairinfo_st(): 
     tid(-1), F2(-1), F2_rp(-1), F2_rd(-1), F2_acurate(0), 
     R1(-1), R1_rp(-1), R1_rd(-1), R1_acurate(0), un(-1), 
     MS_F2(-1), MS_F2_rd(-1), MS_R1(-1), MS_R1_rd(-1), MS_ED(-1), MS_ED_count(-1), MS_S_count(-1), 
     F2_sr(-1), R1_sr(-1), sr_ed(-1), sr_count(-1),
-    rpscore(-1), rdscore(-1), srscore(-1), pair_count(-1), rd(-1) {};
+    rpscore(-1), rdscore(-1), srscore(-1), FRrp(-1), rd(-1) {};
 };
 
 

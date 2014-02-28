@@ -65,9 +65,9 @@ void assess_rd_rp_sr_infomation(pairinfo_st& ibp) ;
 
 void assess_rd_rp_sr_infomation(vector<pairinfo_st>& bp);
 
-void finalize_output(vector<pairinfo_st>& bp, 
-		     vector<pairinfo_st>& strong, 
-		     vector<pairinfo_st>& weak) ;
+//void finalize_output(vector<pairinfo_st>& bp, 
+//		     vector<pairinfo_st>& strong, 
+//		     vector<pairinfo_st>& weak) ;
 //void preprocess_bam_file(string bamFile, string bamRegion, int minS, int minq, int minQ, string fastaFile);
 
 #endif

@@ -829,7 +829,7 @@ void stat_region(pairinfo_st& ibp)
        abs(ibp.R1-ibp.F2)>msc::bam_pe_insert_sd*3 ) {
     check_normal_and_abnormalpairs_cross_region(ibp.tid, ibp.F2, ibp.R1,
 						ibp.F2_rp, ibp.R1_rp, 
-						ibp.pair_count);      
+						ibp.FRrp);      
   }
   
   return;
@@ -858,7 +858,7 @@ void stat_region(pairinfo_st& ibp, string& FASTA, int dx)
        abs(ibp.R1-ibp.F2)>msc::bam_pe_insert_sd*4 ) {
     check_normal_and_abnormalpairs_cross_region(ibp.tid, ibp.F2, ibp.R1,
 						ibp.F2_rp, ibp.R1_rp, 
-						ibp.pair_count);      
+						ibp.FRrp);      
   }
   
   return;
@@ -878,31 +878,29 @@ void assess_rd_rp_sr_infomation(pairinfo_st& ibp, int medRD, int medRP)
   int rdscore=0;
   int srscore=0;
   
-  int rd_normal=min(ibp.F2_rd, ibp.R1_rd);
-  if ( rd_normal < max(ibp.F2_rd, ibp.R1_rd)/3 ) rd_normal=max(ibp.F2_rd, ibp.R1_rd)/3;
-  if ( rd_normal < medRD/2 ) rd_normal = medRD/2; 
-  if ( rd_normal < 10 ) rd_normal = 10; 
+  // find out normal read depth and pairs around bp
+  // when rd_normal is too low, it is unreliable anyway
+  int rd_normal=max( 10, min(ibp.F2_rd, ibp.R1_rd) );
+  rd_normal = max( rd_normal, max(ibp.F2_rd, ibp.R1_rd)/3 );
+  rd_normal = max( rd_normal, medRD/2 ); 
   
-  int pr_normal=min(ibp.F2_rp, ibp.R1_rp);
-  if ( pr_normal < max(ibp.F2_rp, ibp.R1_rp)/3 ) pr_normal=max(ibp.F2_rp, ibp.R1_rp)/3;
-  if ( pr_normal < medRP/2 ) pr_normal=medRP/2;
-  if ( pr_normal > max(ibp.F2_rp, ibp.R1_rp) ) pr_normal=max(ibp.F2_rp, ibp.R1_rp);
-  if ( pr_normal < 20 ) pr_normal= 20;
+  int pr_normal=max( 20, min(ibp.F2_rp, ibp.R1_rp) );
+  pr_normal = max( pr_normal, max(ibp.F2_rp, ibp.R1_rp)/3 );
+  pr_normal = max( pr_normal, medRP/2 );
+  pr_normal = min( pr_normal, max(ibp.F2_rp, ibp.R1_rp) );
+  pr_normal = max( pr_normal, 20 );
   
   // expected pairs for variation
   int rd_expected=(double)rd_normal/2.0f*msc::bam_pe_insert/2.0f/msc::bam_l_qseq;
-  int pr_expected=pr_normal;
-  if ( ibp.F2 > ibp.R1 ) {
-    rd_expected=(double)rd_normal/2.0f*msc::bam_pe_insert/2.0f/msc::bam_l_qseq;
-    pr_expected=pr_normal/2;
-  }
-  pr_expected= ibp.F2_rp>0 ? (pr_expected+rd_expected)*0.5f : rd_expected ;
+  int pr_expected= ibp.F2 > ibp.R1 ? pr_normal/2 : pr_normal;
+  pr_expected= ibp.F2_rp>0 && ibp.R1_rp>0 ? 
+    (pr_expected+rd_expected)*0.5f : rd_expected ;
   
   // read pair score
-  if ( ibp.pair_count>pr_expected*1/3 ) rpscore=1;
-  if ( ibp.pair_count>pr_expected*1/2 ) rpscore=2;
-  if ( ibp.pair_count>pr_expected*2/3 ) rpscore=3;
-  if ( ibp.pair_count>pr_expected*3/4 ) rpscore=4;
+  if ( ibp.FRrp>pr_expected*1/3 ) rpscore=1;
+  if ( ibp.FRrp>pr_expected*1/2 ) rpscore=2;
+  if ( ibp.FRrp>pr_expected*2/3 ) rpscore=3;
+  if ( ibp.FRrp>pr_expected*3/4 ) rpscore=4;
   
   // read depth score
   if ( ibp.F2 < ibp.R1 ) { // DEL type of signal
@@ -937,6 +935,10 @@ void assess_rd_rp_sr_infomation(pairinfo_st& ibp, int medRD, int medRP)
 	 (ibp.F2_sr*4 > ibp.MS_F2_rd && ibp.R1_sr*4 > ibp.MS_R1_rd) ) srscore=3;
     if ( ibp.F2_sr*3 > ibp.MS_F2_rd &&  ibp.R1_sr*3 > ibp.MS_R1_rd ) srscore=4;
   }
+  
+  // low coverage pass-through
+  if ( ibp.F2_rd<6 && ibp.R1_rd<6 && ibp.rd<6 ) rdscore=0;
+  if ( ibp.F2_rp<6 && ibp.R1_rp<6 && ibp.FRrp<6 ) rpscore=0;
   if ( ibp.MS_ED>msc::bam_l_qseq/2 ) srscore=0;
   if ( ibp.F2_sr<=2 && ibp.R1_sr<=2 ) if ( srscore>0 ) srscore=0;
   if ( ibp.F2_sr<=2 || ibp.R1_sr<=2 ) if ( srscore>1 ) srscore=1;
@@ -982,125 +984,4 @@ void assess_rd_rp_sr_infomation(vector<pairinfo_st>& bp)
   return;
   
 }
-
-
-void finalize_output(vector<pairinfo_st>& bp, 
-		     vector<pairinfo_st>& strong, 
-		     vector<pairinfo_st>& weak) 
-{
-  strong.clear();
-  weak.clear();
-  if ( bp.size() < 1 ) return;
-  
-  for(size_t i=1; i<bp.size(); ++i) cerr << cnv_format1(bp[i]) << endl;
-
-  // remove duplicated 
-  for(size_t i=1; i<bp.size(); ++i) {
-    if ( bp[i].F2==bp[i-1].F2 && bp[i].R1==bp[i-1].R1 ) {
-      int ikeep=i;
-      
-      ikeep = bp[i-1].sr_count > bp[i].sr_count ? i-1 : i;
-      bp[i].un=bp[ikeep].un;
-      bp[i].sr_ed=bp[ikeep].sr_ed;
-      bp[i].sr_count=bp[ikeep].sr_count;
-      
-      if ( bp[i-1].rdscore != bp[i].rdscore )
-	ikeep = bp[i-1].rdscore > bp[i].rdscore ? i-1 : i;
-      bp[i].F2_rd=bp[ikeep].F2_rd;
-      bp[i].R1_rd=bp[ikeep].R1_rd;
-      bp[i].rd=bp[ikeep].rd;
-      bp[i].rdscore=bp[ikeep].rdscore;
-      
-      if ( bp[i-1].rpscore != bp[i].rpscore )
-	ikeep = bp[i-1].rpscore > bp[i].rpscore ? i-1 : i;
-      bp[i].F2_rp=bp[ikeep].F2_rp;
-      bp[i].R1_rp=bp[ikeep].R1_rp;
-      bp[i].pair_count=bp[ikeep].pair_count;
-      bp[i].rpscore=bp[ikeep].rpscore;
-      
-      if ( bp[i-1].srscore != bp[i].srscore )
-	ikeep = bp[i-1].srscore > bp[i].srscore ? i-1 : i;
-      bp[i].F2_sr=bp[ikeep].F2_sr;
-      bp[i].R1_sr=bp[ikeep].R1_sr;
-      bp[i].MS_ED=bp[ikeep].MS_ED;
-      bp[i].MS_ED_count=bp[ikeep].MS_ED_count;
-      bp[i].srscore=bp[ikeep].srscore;
-      
-      bp[i-1].sr_count=-9;
-      bp[i-1].rdscore=bp[i-1].rpscore=bp[i-1].srscore=-1;
-    }
-  }
-  
-  // decide signal strength
-  for(size_t i=0; i<bp.size(); ++i) {
-    if ( bp[i].sr_count==-9 ) continue;
-    
-    // to discard
-    if ( bp[i].rdscore<=0 && 
-	 bp[i].rpscore<=0 &&
-	 bp[i].srscore<=0 &&
-	 bp[i].sr_count<=3 ) continue;
-    
-    if ( bp[i].rdscore<=0 && 
-	 bp[i].rpscore<=0 &&
-	 bp[i].srscore<=0 &&
-	 bp[i].un>=msc::minOverlap &&
-	 bp[i].un>=abs(bp[i].F2-bp[i].R1) ) continue;
-    
-    // RD and RP signal
-    // if ( bp[i].rdscore>0 || bp[i].rpscore>0 ) {
-    // strong.push_back( bp[i] );
-    // continue;
-    //}
-    // combined score >=2
-    if ( max(0, bp[i].rpscore)+
-	 max(0, bp[i].rdscore)+
-	 max(0, bp[i].srscore) >=2 ) {
-      strong.push_back( bp[i] );
-      continue;
-    }
-    
-    // short CNV, strong SR signal
-    if ( bp[i].rpscore<0 &&
-	 bp[i].srscore>2 &&
-	 bp[i].un< (float)msc::minOverlap*1.5  ) {
-      strong.push_back( bp[i] );
-      continue;
-    }
-    if ( abs(bp[i].F2-bp[i].R1)<msc::bam_pe_insert_sd*5 &&
-	 bp[i].srscore>2 &&
-	 bp[i].un< (float)msc::minOverlap*1.5  ) {
-      strong.push_back( bp[i] );
-      continue;
-    }
-    
-    
-    // strong softclips signal
-    int medRD=(bp[i].F2_rd +  bp[i].R1_rd)/2;
-    double expected_pairs= (double)medRD * 0.5 * 0.5 *
-      (1.0 -(double)msc::minOverlap/(double)msc::bam_l_qseq ) *
-      (1.0 - 2.0*(double)msc::minSNum/(double)msc::bam_l_qseq );
-    if ( expected_pairs<20 ) expected_pairs=20;
-    if ( bp[i].un< (float)msc::minOverlap*1.5 && 
-	 bp[i].sr_count>=expected_pairs ) {
-      strong.push_back( bp[i] );
-      continue;
-    }
-    
-    if ( bp[i].sr_count<3 && abs(bp[i].F2-bp[i].R1)<=bp[i].un ) continue;
-    
-    weak.push_back( bp[i] );
-  }
-  
-  for(int i=strong.size()-1; i>=0; --i) {
-    if ( strong[i].rdscore<=0 && strong[i].rpscore==0 &&
-	 abs(strong[i].F2-strong[i].R1) > msc::bam_pe_insert_sd*7 ) {
-      weak.push_back(strong[i]);
-      strong.erase(strong.begin()+i);
-    }
-  }
-  
-  return;
-}
-
 
