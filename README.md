@@ -1,6 +1,6 @@
 ## Update
 
-This is an updated version of [matchclips](https://github.com/yhwu/matchclips) to precisely locate the break points of structure variations. This update mainly focuses on speed and reproducibility, and is intended for real data large files. A 70x coverage whole genome sequencing BAM file should take about 5-8 hours on a single cpu and use about 2GB memory. It is not really helpful to use more than 4 cores. Performance suffers if the computing node is disk IO busy. 
+This is an updated version of [matchclips](https://github.com/yhwu/matchclips) to precisely locate the break points of structure variations. This update mainly focuses on speed and reproducibility, and is intended for real data large files. A 70x coverage whole genome sequencing BAM file should take about 5-8 hours on a single cpu and use about 2-3GB memory. It is not really helpful to use more than 4 cores. Performance suffers if the computing node is disk IO busy. 
 
 This program works as follows:
 
@@ -79,8 +79,7 @@ Please cite MATCHCLIPS by ```doi: 10.3389/fgene.2013.00157```.
 ```
 Note: 
  Any negative number means the field is not calculated, either because it is not necessary, or not useful.
- Along the main ```$output``` file, ```$output.weak``` contains CNVs of weaker signal.
- Short indels(<10 bases) are detected too. But, seriously, short indels ought to be detected directly by mapping software.     
+ Along the main ```$output``` file, ```$output.weak``` contains CNVs of weaker signal. Short indels(<10 bases) are detected too. But, seriously, short indels ought to be detected directly by mapping software.     
 
 ## Usage
 ```
@@ -115,11 +114,8 @@ Options:
 #annotation
 CNV=$BAM.mc
 awk '{OFS="\t"; print $1,$2,$3,0,0,$0}' $CNV > $CNV.anno_input
-   
 $ANNOVAR/table_annovar.pl $CNV.anno_input $ANNOVAR/humandb/ -buildver hg19 -out $CNV.anno -remove -protocol refGene,phastConsElements46way,genomicSuperDups,esp6500si_all,1000g2012apr_all,snp135,ljb2_all -operation g,r,r,f,f,f,f -nastring NA -csvout 
-    
 append_anno.pl $CNV $CNV.anno.hg19_multianno.csv > $CNV.anno
-    
 rm $CNV.anno_input $CNV.anno.hg19*
 ```
 
