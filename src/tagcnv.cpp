@@ -1168,6 +1168,285 @@ int usage_check_sample_table(int argc, char* argv[]) {
   return(0);
 }
 
+int check_sample_table_bak(int argc, char* argv[])
+{
+  
+  if ( argc<3 ) exit( usage_check_sample_table(argc, argv) );
+  
+  string mycommand="";
+  size_t i, k;
+  string QNAME,FLAG,RNAME,POS,MAPQ,CIGAR,MRNM,MPOS,ISIZE,SEQ,QUAL,OPT;
+  string POS1S,POS2S;
+  char CNVTYPE='V';
+  int minLength=3,maxLength=100000000;
+  string cnvFile="",outputFile="STDOUT";
+  vector<string> inputArgv;
+  vector<string> samplecnv(0);
+  vector<string> sampleid(0);
+  vector<int> samplegenotype(0);
+  
+  for(i=0;i<(size_t) argc;++i) inputArgv.push_back(string(argv[i]));
+  mycommand=inputArgv[0];
+  for(i=1;i<inputArgv.size();++i) mycommand+=" "+inputArgv[i];
+  for(i=2;i<inputArgv.size();++i) {
+    if ( inputArgv[i]=="-v" ) {  // input variation file
+      inputArgv[i]="";
+      k=i+1;
+      while( inputArgv[k][0] != '-' ) {
+	samplecnv.push_back(inputArgv[k]);
+	inputArgv[k]="";
+	++k; if ( k==inputArgv.size() ) break;
+      }
+    }
+    if ( inputArgv[i]=="-i" ) {  // sample ids
+      inputArgv[i]="";
+      k=i+1;
+      while( inputArgv[k][0] != '-' ) {
+	sampleid.push_back(inputArgv[k]);
+	inputArgv[k]="";
+	++k; if ( k==inputArgv.size() ) break;
+      }
+    }
+    if ( inputArgv[i]=="-l" ) {  // minimum length
+      minLength=atoi(inputArgv[i+1].c_str());
+      inputArgv[i]="";
+      inputArgv[i+1]="";
+    }
+    if ( inputArgv[i]=="-L" ) {  // max length
+      maxLength=atoi(inputArgv[i+1].c_str());
+      inputArgv[i]="";
+      inputArgv[i+1]="";
+    }
+    if ( inputArgv[i]=="-t" ) {  // cnv type
+      CNVTYPE=inputArgv[i+1][0];
+      inputArgv[i]="";
+      inputArgv[i+1]="";
+    }
+    if ( inputArgv[i]=="-o" ) {  // output file
+      outputFile=inputArgv[i+1];
+      inputArgv[i]="";
+      inputArgv[i+1]="";
+    }
+  }
+  
+  if ( samplecnv.size()==0 ) exit( usage_check_sample_table(argc, argv) );
+  
+  cerr << "#CommandL : " << mycommand << "\n";
+  
+  // sample id
+  if ( sampleid.size() != samplecnv.size() ) {
+    sampleid.empty();
+    for(i=0;i<samplecnv.size();++i) {
+      size_t found=samplecnv[i].rfind('/');
+      string id=samplecnv[i].substr(found+1);
+      found=id.find('.');
+      if (found==string::npos) found=id.length();
+      id=id.substr(0,found);
+      sampleid.push_back(id);
+      //cerr << id << "\t" << samplecnv[i] << endl;
+    }
+  }
+  
+  streambuf* sbuf = cout.rdbuf();
+  ofstream FOUT;
+  if ( outputFile != "STDOUT" ) {
+    FOUT.open(outputFile.c_str());
+    cout.rdbuf(FOUT.rdbuf());
+  }
+  
+  
+  vector<cnv_st> cnvlist(0);
+  vector<cnv_st> allcnvlist(0);
+  cnv_st icnv;
+  ifstream FIN;
+  for(i=0;i<samplecnv.size();++i) {
+    if ( ! file_exist(samplecnv[i]) ) { 
+      cerr << samplecnv[i] << " not found\n"; 
+      exit(0); 
+    }
+    
+    FIN.open(samplecnv[i].c_str());
+    cnvlist.clear();
+    while ( !FIN.eof() ) {
+      string tmps,tmps1;
+      getline(FIN,tmps);
+      if ( tmps[0] == '#' || tmps.length() <2 ) continue;
+      istringstream iss(tmps);
+      iss >> icnv.RNAME >> icnv.P1 >> icnv.P2 >> tmps1;
+      if ( tmps1=="D" || tmps1=="A" || tmps1=="V" ) icnv.T=tmps1[0];
+      if ( icnv.P1 > icnv.P2 ) swap(icnv.P1, icnv.P2);
+      if ( icnv.P2 - icnv.P1 < minLength ) continue;
+      if ( icnv.P2 - icnv.P1 > maxLength ) continue;
+      if ( icnv.T != CNVTYPE && CNVTYPE!='V' ) continue;
+      
+      cnvlist.push_back(icnv);
+    }
+    FIN.close();
+    
+    allcnvlist.insert(allcnvlist.end(), cnvlist.begin(),cnvlist.end() );
+  }
+  cerr << "#total cnv " << cnvlist.size() << endl;
+
+  // sort the cnv list according to P1
+  vector<int64_t> GPOSID(allcnvlist.size());
+  for(k=0;k<allcnvlist.size();++k) {
+    allcnvlist[k].GP1=chrompos2int64(allcnvlist[k].RNAME,allcnvlist[k].P1);
+    allcnvlist[k].GP2=chrompos2int64(allcnvlist[k].RNAME,allcnvlist[k].P2);
+    GPOSID[k]=allcnvlist[k].GP1;
+  }
+  vector<int> idx(allcnvlist.size());
+  arrayindex(GPOSID,idx,1);
+  vector<cnv_st> allcnvlist_tmp(allcnvlist.size());
+  for(k=0;k<allcnvlist.size();++k) allcnvlist_tmp[k]=allcnvlist[ idx[k] ];
+  allcnvlist=allcnvlist_tmp;
+  /*
+  for(k=0;k<allcnvlist.size();++k) 
+    cerr << allcnvlist[k].RNAME << "\t" 
+	 << allcnvlist[k].P1 << "\t"
+	 << allcnvlist[k].GP1 << endl;
+  */
+  cerr << "#total from all samples : " << allcnvlist.size() << endl;
+  
+  // compact the list, remove duplicate and mostly overlapped
+  allcnvlist_tmp.clear();
+  allcnvlist_tmp.push_back(allcnvlist[0]);
+  for(k=1;k<allcnvlist.size();++k) {
+    
+    bool overlap=false;
+    if ( max( allcnvlist[k].GP1, allcnvlist_tmp.back().GP1 ) <=
+	 min( allcnvlist[k].GP2, allcnvlist_tmp.back().GP2 ) ) overlap=true;
+    if ( !overlap ) {
+      allcnvlist_tmp.push_back(allcnvlist[k]);
+      continue;
+    }
+    
+    double overLen=min( allcnvlist[k].GP2, allcnvlist_tmp.back().GP2 ) - 
+      max( allcnvlist[k].GP1, allcnvlist_tmp.back().GP1 );
+    if ( overLen > ( allcnvlist_tmp.back().GP2-allcnvlist_tmp.back().GP1 )*0.8 &&
+	 overLen > ( allcnvlist[k].GP2-allcnvlist[k].GP1 )*0.8 ) {
+      icnv=allcnvlist_tmp.back();
+      icnv.P1=min( allcnvlist[k].P1, allcnvlist_tmp.back().P1 );
+      icnv.GP1=min( allcnvlist[k].GP1, allcnvlist_tmp.back().GP1 );
+      icnv.P2=max( allcnvlist[k].P2, allcnvlist_tmp.back().P2 );
+      icnv.GP2=max( allcnvlist[k].GP2, allcnvlist_tmp.back().GP2 );
+      allcnvlist_tmp.back()=icnv;
+    }
+    else { allcnvlist_tmp.push_back(allcnvlist[k]); }
+  }
+  allcnvlist=allcnvlist_tmp;
+  /*
+  for(k=0;k<allcnvlist.size();++k) 
+    cerr << allcnvlist[k].RNAME << "\t" 
+	 << allcnvlist[k].P1 << "\t" 
+	 << allcnvlist[k].P2 << "\t" 
+	 << allcnvlist[k].GP1 << "\t" 
+	 << allcnvlist[k].GP2 << "\t" 
+	 << endl;
+  */
+  cerr << "#total after overlaps combined : " << allcnvlist.size() << endl;
+  // exit(0);
+  
+  // read cnv again and check overlap
+  size_t ncnv=allcnvlist.size();
+  size_t nids=samplecnv.size();
+  vector< vector<char> > cnvtype(nids);
+  for(i=0;i<nids;++i) {
+    cnvtype[i].resize(ncnv);
+    cnvtype[i]=vector<char>(ncnv,'0');
+  }
+  vector< vector<char> > cnvoverlap(ncnv, vector<char>(nids,'0'));
+  
+  for(i=0;i<samplecnv.size();++i) {
+    
+    FIN.open(samplecnv[i].c_str());
+    while ( !FIN.eof() ) {
+      string tmps,tmps1;
+      getline(FIN,tmps);
+      if ( tmps[0] == '#' || tmps.length() <2 ) continue;
+      istringstream iss(tmps);
+      
+      iss >> icnv.RNAME >> icnv.P1 >> icnv.P2 >> tmps1;
+      if ( tmps1=="D" || tmps1=="A" || tmps1=="V" ) icnv.T=tmps1[0];
+      if ( icnv.P1 > icnv.P2 ) swap(icnv.P1, icnv.P2);
+      if ( icnv.P2 - icnv.P1 < minLength ) continue;
+      if ( icnv.P2 - icnv.P1 > maxLength ) continue;
+      if ( icnv.T != CNVTYPE && CNVTYPE!='V' ) continue;
+      icnv.GP1=chrompos2int64(icnv.RNAME,icnv.P1);
+      icnv.GP2=chrompos2int64(icnv.RNAME,icnv.P2);
+      
+      bool overlap=false;
+      for(k=0;k<allcnvlist.size();++k) {
+	if ( max( allcnvlist[k].GP1, icnv.GP1 ) <=
+	     min( allcnvlist[k].GP2, icnv.GP2 ) ) {
+	  overlap=true;
+	  cnvoverlap[k][i]=icnv.T;
+	  cnvtype[i][k]=icnv.T;
+	}
+	if ( allcnvlist[k].GP1 > icnv.GP2 ) break;
+      }
+
+    }
+    FIN.close();
+    
+  }
+  
+  vector<size_t> sumocnv(samplecnv.size(),0);
+  vector<size_t> sumoid(allcnvlist.size(),0);
+  for(k=0;k<allcnvlist.size();++k) 
+    for(i=0;i<samplecnv.size();++i) 
+      if ( cnvoverlap[k][i]!='0' ) { 
+	sumoid[k]++; 
+	sumocnv[i]++;
+      }
+  
+  cout << "##sampleid_and_inputfile\n";
+  for(i=0;i<samplecnv.size();++i) cout << "##" << sampleid[i] << "\t" << samplecnv[i] << "\n";
+  
+  cout << "#RNAME\t" << "POS1\t" << "POS2\t" << "TYPE\t" << "ROWSUM";
+  for(i=0;i<samplecnv.size();++i) cout << "\t" << sampleid[i];
+  cout << "\n";
+  cout << "##CSUM\t" << "POS1\t" << "POS2\t" << "TYPE\t" << "ROWSUM";
+  for(i=0;i<samplecnv.size();++i) cout << "\t" << sumocnv[i];
+  cout << endl;
+  
+  for(k=0;k<allcnvlist.size();++k) {
+    cout << allcnvlist[k].RNAME << "\t"
+	 << allcnvlist[k].P1 << "\t"
+	 << allcnvlist[k].P2 << "\t"
+      // << allcnvlist[k].GP1 << "\t"
+	 << allcnvlist[k].T << "\t"
+	 << sumoid[k];
+    for(i=0;i<samplecnv.size();++i) cout << "\t" << cnvoverlap[k][i];
+    cout << endl;
+  }
+  
+  FOUT.close();
+  cout.rdbuf(sbuf);
+  return(0);
+}
+
+bool sort_cnv_st(cnv_st& cnv1, cnv_st& cnv2)
+{
+  if ( cnv1.RNAME==cnv2.RNAME ) return ( cnv1.P1 < cnv1.P2 );
+  else {
+
+    string R1=cnv1.RNAME;
+    string R2=cnv2.RNAME;
+    if ( R1.find("chr")==0 ) R1=R1.substr(3);
+    if ( R1=="X" ) R1="23";
+    if ( R1=="Y" ) R1="24";
+    if ( R2.find("chr")==0 ) R2=R2.substr(3);
+    if ( R2=="X" ) R2="23";
+    if ( R2=="Y" ) R2="24";
+    
+    if ( (R1[0]>='0' && R1[0]<='9') || (R2[0]>='0' && R2[0]<='9') ) {
+      return ( atoi(R1.c_str()) < atoi(R2.c_str()) );
+    }
+    else { return ( R1 < R2 ); }
+    
+  }
+}
+
 int check_sample_table(int argc, char* argv[])
 {
   
@@ -1425,7 +1704,6 @@ int check_sample_table(int argc, char* argv[])
   cout.rdbuf(sbuf);
   return(0);
 }
-
 
 int usage_check_sample_subset(int argc, char* argv[]) {
   cerr << "This subroutine subset CNVs from input files within given regions\n\n";

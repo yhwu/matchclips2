@@ -24,6 +24,8 @@ using namespace std;
 #include "preprocess.h"
 #include "exhaustive.h"
 #include "pairguide.h"
+#include "statcnv.h"
+
 
 pthread_mutex_t nout;
 
@@ -35,6 +37,7 @@ long msc::seed=137;
 bool msc::debug=false;
 int msc::start=0;
 int msc::end=0;
+int msc::dx=1000;
 ofstream msc::fout;
 string msc::mycommand="";
 string msc::execinfo="";
@@ -70,6 +73,7 @@ int msc::bam_rd=0;
 int msc::bam_rd_sd=0;
 int msc::bam_tid=-1;        //! if msc::tid>0 only process msc::tid
 string msc::chr="chr";
+string msc::FASTA="";
 vector<string> msc::bam_target_name(0);
 vector<uint8_t> msc::bdata(0); 
 vector<uint8_t> msc::bpdata(0); 
@@ -458,6 +462,7 @@ void get_pairend_info(int ref, int beg, int end)
   
   iter = bam_iter_query(msc::bamidx, ref, beg, end);
   
+  vector<double> pe(0); pe.reserve(15000);
   while(  bam_iter_read(msc::fp_in->x.bam, iter, b)  > 0 ) {
     ++count;
     l_qseq_sum+=b->core.l_qseq;
@@ -472,6 +477,7 @@ void get_pairend_info(int ref, int beg, int end)
     isize   += abs(b->core.isize);
     isize2  += (double)b->core.isize * (double)b->core.isize;
     isize_c += 1;
+    pe.push_back( abs(b->core.isize) );
     if ( isize_c > 10000 ) break;
     if ( count > 200000 ) break;
   }
@@ -496,11 +502,18 @@ void get_pairend_info(int ref, int beg, int end)
       cerr << "isize sd is too small " << isize_sd << " changed to 30" << endl;  
       isize_sd=30;
     }
+    
+    sort( pe.begin(), pe.end() );
+    // for(int i=0; i<pe.size(); ++i) cerr << pe[i] << "\t"; cerr << endl;
+    isize=pe[ pe.size()/2 ];
+    isize_sd= ( pe[pe.size()/4*3] - pe[pe.size()/4] ) / 1.35;
+    
     msc::bam_is_paired=true;
-    msc::bam_pe_insert=isize;
-    msc::bam_pe_insert_sd=isize_sd;
+    msc::bam_pe_insert=(int)isize;
+    msc::bam_pe_insert_sd=(int)isize_sd;
   }
   cerr << "sampled from " << isize_c << " reads" << endl
+       << "bam_target\t" << msc::fp_in->header->target_name[ ref ] << "\n"
        << "bam_l_qseq\t" << msc::bam_l_qseq << "\n"
        << "bam_is_paired\t" << msc::bam_is_paired << "\n"
        << "bam_pe_insert\t" << msc::bam_pe_insert << "\n"
@@ -509,14 +522,10 @@ void get_pairend_info(int ref, int beg, int end)
   
   
   if ( isize>1000 || isize_sd>2*isize || isize_sd<0 ) {
+    msc::bam_pe_insert_sd=msc::bam_pe_insert/2;
     cerr << "unusual behavior\n"
-	 << msc::fp_in->header->target_name[ ref ] << endl
-	 << ref << "\t" << beg << "\t" << end << endl
-	 << isize << "\t" << isize2 << "\t" << isize_c << endl
-	 << "continue with default values 250 50"
-	 << endl;
-    msc::bam_pe_insert=250;
-    msc::bam_pe_insert_sd=50;
+	 << "continue with default values " << msc::bam_pe_insert << " "
+	 << msc::bam_pe_insert_sd << endl;
   }
 
   if ( msc::minOverlap*4<msc::bam_l_qseq ) {
@@ -671,6 +680,7 @@ int get_parameters(int argc, char* argv[])
     if ( ARGV[i]=="-vvv" ) { msc::verbose=3; _next1; }
     if ( ARGV[i]=="-dump" ) { msc::dumpBam=true; _next1; }
     if ( ARGV[i]=="-cnv" ) { msc::cnvFile=ARGV[i+1]; _next2; }
+    if ( ARGV[i]=="-d" ) { msc::dx=atoi(ARGV[i+1].c_str()); _next2; }
     if ( ARGV[i]=="-se" ) { msc::bam_pe_disabled=true; _next1; }
     if ( ARGV[i]=="-pe" ) { 
       msc::bam_pe_set_by_user=true;
@@ -747,6 +757,11 @@ void match_MS_SM_reads(int argc, char* argv[])
     msc::fp_out = msc::outFile=="STDOUT" ? 
       samopen("-", "w", msc::fp_in->header) :
       samopen(msc::outFile.c_str(), "wb", msc::fp_in->header) ;
+  }
+  
+  if ( msc::cnvFile!="" ) {
+    stat_cnv_file( msc::cnvFile );
+    msc::bamRegion.clear();  // bypass processing bam file
   }
   
   for(int ichr=0; ichr<(int)msc::bamRegion.size(); ++ichr ) {

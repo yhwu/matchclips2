@@ -1,4 +1,4 @@
-PROGRAMS = matchclips tagcnv
+PROGRAMS = matchclips tagcnv cnvtable
 SAMTOOLS = samtools-0.1.19
 all: $(PROGRAMS)
 TITLE = matchclip2
@@ -18,7 +18,13 @@ TAGOBJ = $(TAGCXX:.cpp=.o)
 tagcnv : $(TAGOBJ) $(TAGCXX) $(TAGHDR) Makefile
 	$(CC) $(CFLAGS) $(TAGOBJ) $(INC) $(LIBS)  -o $@
 
-MATCHCXX =  matchreadsmain.cpp matchreads.cpp preprocess.cpp exhaustive.cpp pairguide.cpp  samfunctions.cpp readref.cpp functions.cpp
+cnvtable : cnvtable.o functions.o Makefile
+	$(CC) -g -Wall -O2 cnvtable.o functions.o  -o $@
+
+cnvtable.o: cnvtable.cpp 
+	$(CC) -c $(CFLAGS) $< -o $@
+
+MATCHCXX =  matchreadsmain.cpp matchreads.cpp preprocess.cpp exhaustive.cpp pairguide.cpp  samfunctions.cpp readref.cpp functions.cpp statcnv.cpp
 MATCHHDR = $(MATCHCXX:.cpp=.h)	
 MATCHOBJ = $(MATCHCXX:.cpp=.o)	
 matchclips : $(MATCHOBJ) $(MATCHCXX) $(MATCHHDR) Makefile ./${SAMTOOLS}/libbam.a

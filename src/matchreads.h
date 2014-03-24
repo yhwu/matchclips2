@@ -17,6 +17,7 @@ public:
   static bool debug;
   static int start;
   static int end;
+  static int dx;
   static ofstream fout;
   static string mycommand;
   static string execinfo;
@@ -56,6 +57,7 @@ public:
   static vector<uint32_t> rd;
   static vector<string> bam_target_name;
   static string chr;
+  static string FASTA;
   static samfile_t *fp_in;
   static bam_index_t *bamidx;
   static samfile_t *fp_out;
@@ -92,55 +94,6 @@ struct RSAI_st {        // read suffic array index
 	    mms(0),
 	    mmm(0){};
 };
-
-struct BREAKSEEK_st {        // describes break point discovery
-  static string BUFFER;      // buffer to save information
-  int tid;              // target id as in TARGET
-  int P1;               // first break point position in chromosome
-  int P2;               // second break point position in chromosome
-  int L1;               // length of readMS
-  int S1;               // clipped bases of readMS
-  int n1;               // mismatched bases in clipped port of readMS
-  int L2;               // length of readSM
-  int S2;               // clipped bases of readSM
-  int n2;               // mismatched bases in clipped port of readMS
-  int q1;               // map quality of read1
-  int q2;               // map quality of read2
-  int CL;               // common string length of reads
-  int len;              // length of variation
-  int ED;               // edit_distance between matched and reference
-  int ED5p;             // edit_distance between merged and reference at 5'
-  int ED3p;             // edit_distance between merged and reference at 3'
-  int UN;               // uncertainty of break point
-  char T;               // D for DEL, A for ADD
-  char SVSEQ[51];       // 30 chars befroe and after the SV, includes BP 
-  int count;            // number of supportive pairs
-  bool isit;            // number of supportive pairs
-  string INSEQ;         // inserted sequence for Insertion only
-  string MERGE;         // sequence of merged reads
-  string TAG;           // comment on cnv
-  string RNAME;
-  BREAKSEEK_st():tid(-9),
-		 P1(0),
-		 P2(0),
-		 L1(0),
-		 n1(0),
-		 L2(0),
-		 n2(0),
-		 CL(0),
-		 len(0),
-		 ED(0),
-		 UN(0),
-		 count(0),
-		 isit(true),
-		 INSEQ("."),
-		 MERGE(200,'C'),
-		 TAG(30,'d'){};
-};
-//  static int ctid;      // current tid
-//  string RNAME( ) { return ( msc::bam_target_name[tid] ); }
-//map<string, int> BREAKSEEK_st::RNAMEINT;
-//int BREAKSEEK_st::ctid;
 
 struct intpair_st {     
   int F2;
@@ -204,23 +157,14 @@ struct pairinfo_st {
 };
 
 
-struct thread_data_t {
-  int thread_id;
-  int NUM_THREADS;
-  string* SEQBUFFER;
-  vector<RSAI_st>* MSREAD;
-  vector<RSAI_st>* SMREAD;
-  string* FASTA;
-  string* RNAME;
-  vector<BREAKSEEK_st>* BPSEEK;
-};
-
 string tmpfile(int thread_id);
 
 void write_ED_st_to_file(vector<ED_st>& ed, string fn);
 
 string cnv_format1(pairinfo_st &bp);
 string mr_format1(pairinfo_st &bp);
+
+void get_pairend_info(int ref, int beg, int end);
 
 void match_MS_SM_reads(int argc, char* argv[]);
 
