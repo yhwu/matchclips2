@@ -24,7 +24,7 @@ using namespace std;
 #include "preprocess.h"
 #include "exhaustive.h"
 #include "pairguide.h"
-#include "statcnv.h"
+//#include "statcnv.h"
 
 
 pthread_mutex_t nout;
@@ -757,11 +757,6 @@ void match_MS_SM_reads(int argc, char* argv[])
     msc::fp_out = msc::outFile=="STDOUT" ? 
       samopen("-", "w", msc::fp_in->header) :
       samopen(msc::outFile.c_str(), "wb", msc::fp_in->header) ;
-  }
-  
-  if ( msc::cnvFile!="" ) {
-    stat_cnv_file( msc::cnvFile );
-    msc::bamRegion.clear();  // bypass processing bam file
   }
   
   for(int ichr=0; ichr<(int)msc::bamRegion.size(); ++ichr ) {

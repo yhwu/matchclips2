@@ -24,7 +24,7 @@ cnvtable : cnvtable.o functions.o Makefile
 cnvtable.o: cnvtable.cpp 
 	$(CC) -c $(CFLAGS) $< -o $@
 
-MATCHCXX =  matchreadsmain.cpp matchreads.cpp preprocess.cpp exhaustive.cpp pairguide.cpp  samfunctions.cpp readref.cpp functions.cpp statcnv.cpp
+MATCHCXX =  matchreadsmain.cpp matchreads.cpp preprocess.cpp exhaustive.cpp pairguide.cpp  samfunctions.cpp readref.cpp functions.cpp
 MATCHHDR = $(MATCHCXX:.cpp=.h)	
 MATCHOBJ = $(MATCHCXX:.cpp=.o)	
 matchclips : $(MATCHOBJ) $(MATCHCXX) $(MATCHHDR) Makefile ./${SAMTOOLS}/libbam.a
