@@ -715,6 +715,8 @@ void prepare_pairend_matchclip_data(int ref, int beg, int end,
   bam1_t ibam;
   intpair_st ipair;
   
+  double isize=0.0, isize2=0.0, isize_c=0, isize_sd=0.0;
+  
   iter = bam_iter_query(msc::bamidx, ref, beg, end);
   size_t count=0;
   int bam_beg=0, bam_end=0;
@@ -755,6 +757,16 @@ void prepare_pairend_matchclip_data(int ref, int beg, int end,
       if ( ipair.F2>0 && ipair.R1>0 ) pairs.push_back(ipair);
     }
     
+    // calculate insert and sd again
+    if ( (b->core.flag & BAM_FPROPER_PAIR) &&
+	 !(b->core.flag & BAM_DEF_MASK) &&
+	 abs(b->core.isize) > msc::bam_pe_insert-10*msc::bam_pe_insert_sd &&
+	 abs(b->core.isize) < msc::bam_pe_insert+10*msc::bam_pe_insert_sd ) {
+      isize   += abs(b->core.isize);
+      isize2  += (double)b->core.isize * (double)b->core.isize;
+      isize_c += 1;
+    }
+    
     RSAI_st iread;
     if (  is_keep_read(b, FASTA, iread) ) {
       // save read in buffer
@@ -784,6 +796,20 @@ void prepare_pairend_matchclip_data(int ref, int beg, int end,
 	 pairs[i].R1<bam_beg || pairs[i].R1>bam_end ) tokeep[i]=false;
   }
   
+  if ( isize_c>2 ) {
+    isize/=isize_c;
+    isize_sd =sqrt( (isize2-isize*isize*isize_c)/isize_c );
+    if ( isize_sd<30 ) {
+      cerr << "isize sd is too small " << isize_sd << " changed to 50" << endl;  
+      isize_sd=50;
+    }
+    if ( !msc::bam_pe_set_by_user ) {    
+      msc::bam_is_paired=true;
+      msc::bam_pe_insert=(int)isize;
+      msc::bam_pe_insert_sd=(int)isize_sd;
+    }
+  }
+  
   size_t k=0;
   for(size_t i=0; i<pairs.size(); ++i) if ( tokeep[i] ) { pairs[k]=pairs[i]; ++k;}
   if ( k<pairs.size() ) pairs.erase( pairs.begin()+k, pairs.end() );
@@ -792,6 +818,7 @@ void prepare_pairend_matchclip_data(int ref, int beg, int end,
        << ":" << commify(bam_beg) << "-" << commify(bam_end) << "\n"
        << "MS:" << b_MS.size() << "  SM:" << b_SM.size() << "  CIGAR_SEQ:" << msc::bdata.size() 
        << "  AbnormalPairs:" << pairs.size() << "\n"
+       << "Pair insert:" << (int)isize << " += " << (int)isize_sd << "\n"
        << "memory used by reads\t" 
        << commify(totalRAM(b_MS)+totalRAM(b_SM)+totalRAM(msc::bdata)) << "\n"
        << "memory used by pairs\t" 
@@ -855,7 +882,8 @@ void stat_region(pairinfo_st& ibp, string& FASTA, int dx)
 		      ibp.F2_rd, ibp.R1_rd, ibp.rd);
   
   if ( msc::bam_is_paired && 
-       abs(ibp.R1-ibp.F2)>msc::bam_pe_insert_sd*4 ) {
+       ( ibp.R1-ibp.F2>msc::bam_pe_insert_sd*3 || 
+	 ibp.R1-ibp.F2<-msc::bam_l_qseq ) ) {
     check_normal_and_abnormalpairs_cross_region(ibp.tid, ibp.F2, ibp.R1,
 						ibp.F2_rp, ibp.R1_rp, 
 						ibp.FRrp);      
@@ -880,41 +908,41 @@ void assess_rd_rp_sr_infomation(pairinfo_st& ibp, int medRD, int medRP)
   
   // find out normal read depth and pairs around bp
   // when rd_normal is too low, it is unreliable anyway
-  int rd_normal=max( 10, min(ibp.F2_rd, ibp.R1_rd) );
-  rd_normal = max( rd_normal, max(ibp.F2_rd, ibp.R1_rd)/3 );
-  rd_normal = max( rd_normal, medRD/2 ); 
+  // int rd_normal=(ibp.F2_rd + ibp.R1_rd)/2;
+  //int rd_expected=(double)rd_normal/2.0f*msc::bam_pe_insert/2.0f/msc::bam_l_qseq;
   
-  int pr_normal=max( 20, min(ibp.F2_rp, ibp.R1_rp) );
-  pr_normal = max( pr_normal, max(ibp.F2_rp, ibp.R1_rp)/3 );
-  pr_normal = max( pr_normal, medRP/2 );
-  pr_normal = min( pr_normal, max(ibp.F2_rp, ibp.R1_rp) );
-  pr_normal = max( pr_normal, 20 );
+  //int pr_normal=max( 20, min(ibp.F2_rp, ibp.R1_rp) );
+  //  pr_normal = max( pr_normal, max(ibp.F2_rp, ibp.R1_rp)/3 );
+  //  pr_normal = max( pr_normal, medRP/2 );
+  //  pr_normal = min( pr_normal, max(ibp.F2_rp, ibp.R1_rp) );
+  //  pr_normal = max( pr_normal, 20 );
   
   // expected pairs for variation
-  int rd_expected=(double)rd_normal/2.0f*msc::bam_pe_insert/2.0f/msc::bam_l_qseq;
+  int pr_normal=max( 20, max(ibp.F2_rp, ibp.R1_rp) );
   int pr_expected= ibp.F2 > ibp.R1 ? pr_normal/2 : pr_normal;
-  pr_expected= ibp.F2_rp>0 && ibp.R1_rp>0 ? 
-    (pr_expected+rd_expected)*0.5f : rd_expected ;
-  
   // read pair score
   if ( ibp.FRrp>pr_expected*1/3 ) rpscore=1;
   if ( ibp.FRrp>pr_expected*1/2 ) rpscore=2;
   if ( ibp.FRrp>pr_expected*2/3 ) rpscore=3;
   if ( ibp.FRrp>pr_expected*3/4 ) rpscore=4;
+  if ( ibp.FRrp<=4 ) rpscore=0; // low signal override
   
   // read depth score
   if ( ibp.F2 < ibp.R1 ) { // DEL type of signal
+    int rd_normal=min(ibp.F2_rd, ibp.R1_rd);
     if ( ibp.rd>=0 && ibp.rd < rd_normal*3/4 ) rdscore=1;
     if ( ibp.rd>=0 && ibp.rd < rd_normal*2/3 ) rdscore=2;
-    if ( ibp.rd>=0 && ibp.rd < rd_normal*11/20 ) rdscore=3;
+    if ( ibp.rd>=0 && ibp.rd < rd_normal*5/9 ) rdscore=3;
     if ( ibp.rd>=0 && ibp.rd < rd_normal*1/5 ) rdscore=4;
   }
   else { // DUP type
-    if ( ibp.rd>=0 && ibp.rd > max(ibp.F2_rd, ibp.R1_rd)*5/4 ) rdscore=1;
-    if ( ibp.rd>=0 && ibp.rd > max(ibp.F2_rd, ibp.R1_rd)*4/3 ) rdscore=2;
-    if ( ibp.rd>=0 && ibp.rd > max(ibp.F2_rd, ibp.R1_rd)*3/2 ) rdscore=3;
-    if ( ibp.rd>=0 && ibp.rd > max(ibp.F2_rd, ibp.R1_rd)*2 ) rdscore=4;
+    int rd_normal=max(ibp.F2_rd, ibp.R1_rd);
+    if ( ibp.rd>=0 && ibp.rd > rd_normal*5/4 ) rdscore=1;
+    if ( ibp.rd>=0 && ibp.rd > rd_normal*4/3 ) rdscore=2;
+    if ( ibp.rd>=0 && ibp.rd > rd_normal*3/2 ) rdscore=3;
+    if ( ibp.rd>=0 && ibp.rd > rd_normal*2 ) rdscore=4;
   }
+  if ( min(ibp.F2_rd, ibp.R1_rd) < 8 ) rdscore=0; // low signal override
   
   // matching read score
   if ( ibp.F2_rd>0 && ibp.R1_rd>0 ) { 
@@ -936,7 +964,19 @@ void assess_rd_rp_sr_infomation(pairinfo_st& ibp, int medRD, int medRP)
     if ( ibp.F2_sr*3 > ibp.MS_F2_rd &&  ibp.R1_sr*3 > ibp.MS_R1_rd ) srscore=4;
   }
   
-  // low coverage pass-through
+  // read depth are always available
+  srscore=0;
+  if ( ibp.F2_rd>0 && ibp.R1_rd>0 ) { 
+    if ( ibp.F2_sr*8 > msc::rd[ibp.F2] || ibp.R1_sr*8 > msc::rd[ibp.R1] ) srscore=1;
+    if ( (ibp.F2_sr*4 > msc::rd[ibp.F2] || ibp.R1_sr*4 > msc::rd[ibp.R1] ) &&
+	 (ibp.F2_sr*8 > msc::rd[ibp.F2] && ibp.R1_sr*8 > msc::rd[ibp.R1] ) ) srscore=2;
+    if ( (ibp.F2_sr*3 > msc::rd[ibp.F2] ||  ibp.R1_sr*3 > msc::rd[ibp.R1] ) &&
+	 (ibp.F2_sr*4 > msc::rd[ibp.F2] && ibp.R1_sr*4 > msc::rd[ibp.R1] ) ) srscore=3;
+    if ( ibp.F2_sr*3 > msc::rd[ibp.F2] &&  ibp.R1_sr*3 > msc::rd[ibp.R1] ) srscore=4;
+  }
+  
+  
+  // low coverage ignored
   if ( ibp.F2_rd<6 && ibp.R1_rd<6 && ibp.rd<6 ) rdscore=0;
   if ( ibp.F2_rp<6 && ibp.R1_rp<6 && ibp.FRrp<6 ) rpscore=0;
   if ( ibp.MS_ED>msc::bam_l_qseq/2 ) srscore=0;

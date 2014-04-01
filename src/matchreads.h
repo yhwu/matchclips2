@@ -54,7 +54,7 @@ public:
   static int bam_tid;
   static vector<uint8_t> bdata;
   static vector<uint8_t> bpdata;
-  static vector<uint32_t> rd;
+  static vector<int32_t> rd;
   static vector<string> bam_target_name;
   static string chr;
   static string FASTA;

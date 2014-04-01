@@ -68,7 +68,7 @@ bool msc::bam_is_paired=false;
 bool msc::bam_pe_disabled=false;
 bool msc::bam_pe_set_by_user=false;
 int msc::bam_pe_insert=500;
-int msc::bam_pe_insert_sd=50;
+int msc::bam_pe_insert_sd=100;
 int msc::bam_rd=0;
 int msc::bam_rd_sd=0;
 int msc::bam_tid=-1;        //! if msc::tid>0 only process msc::tid
@@ -77,7 +77,7 @@ string msc::FASTA="";
 vector<string> msc::bam_target_name(0);
 vector<uint8_t> msc::bdata(0); 
 vector<uint8_t> msc::bpdata(0); 
-vector<uint32_t> msc::rd(0); 
+vector<int32_t> msc::rd(0); 
 samfile_t *msc::fp_in = NULL;
 bam_index_t *msc::bamidx=NULL;
 samfile_t *msc::fp_out = NULL;
@@ -264,6 +264,7 @@ void write_cnv_to_file(vector<pairinfo_st>& bp, string fn)
   if ( is_new ) {
     FOUT.open(fn.c_str());
     files.push_back(fn);
+    FOUT << "##Command Line: " << msc::mycommand << endl;
     FOUT << cnv_format1() << endl;
   }    
   else FOUT.open(fn.c_str(), std::ofstream::app);
@@ -375,27 +376,31 @@ void finalize_output(vector<pairinfo_st>& bp,
   for(size_t i=0; i<bp.size(); ++i) {
     if ( bp[i].sr_count==-9 ) continue;
     
-    // to discard
+    // discard: all signals are weak
     if ( bp[i].rdscore<=0 && 
 	 bp[i].rpscore<=0 &&
 	 bp[i].srscore<=0 &&
 	 bp[i].sr_count<=3 ) continue;
     
+    // discard: only sr signal due to repeats
     if ( bp[i].rdscore<=0 && 
 	 bp[i].rpscore<=0 &&
 	 bp[i].srscore<=0 &&
 	 bp[i].un>=msc::minOverlap &&
 	 bp[i].un>=abs(bp[i].F2-bp[i].R1) ) continue;
     
-    // RD and RP signal
-    // if ( bp[i].rdscore>0 || bp[i].rpscore>0 ) {
-    // strong.push_back( bp[i] );
-    // continue;
-    //}
-    // combined score >=2
+    // strong: combined score >=2
     if ( max(0, bp[i].rpscore)+
 	 max(0, bp[i].rdscore)+
 	 max(0, bp[i].srscore) >=2 ) {
+      strong.push_back( bp[i] );
+      continue;
+    }
+    
+    // short CNV, strong RD signal
+    if ( abs(bp[i].F2-bp[i].R1)<msc::bam_l_qseq &&
+	 bp[i].rdscore>=2 &&
+	 bp[i].un< (float)msc::minOverlap*1.5  ) {
       strong.push_back( bp[i] );
       continue;
     }
@@ -414,8 +419,7 @@ void finalize_output(vector<pairinfo_st>& bp,
       continue;
     }
     
-    
-    // strong softclips signal
+    // strong: softclips signal
     int medRD=(bp[i].F2_rd +  bp[i].R1_rd)/2;
     double expected_pairs= (double)medRD * 0.5 * 0.5 *
       (1.0 -(double)msc::minOverlap/(double)msc::bam_l_qseq ) *
@@ -432,14 +436,35 @@ void finalize_output(vector<pairinfo_st>& bp,
     weak.push_back( bp[i] );
   }
   
+  // some consideration for special cases such as exome or target sequencing
   for(int i=strong.size()-1; i>=0; --i) {
     bool is_weak=false;
     
-    if ( strong[i].rdscore<=0 && strong[i].rpscore==0 &&
-	 abs(strong[i].F2-strong[i].R1) > msc::bam_pe_insert_sd*7 ) is_weak=true;
+    // read depth too low < 10 around cnv
+    if ( min(strong[i].F2_rd, strong[i].R1_rd) < 10 ) is_weak=true;
     
-    if ( strong[i].rdscore<=0 && strong[i].rpscore==0 &&
-	 strong[i].un*2>msc::bam_l_qseq ) is_weak=true;
+    // long variation without pair support
+    if ( abs(strong[i].F2-strong[i].R1) > msc::bam_pe_insert_sd*7  && 
+	 strong[i].rpscore==0 && msc::bam_is_paired ) is_weak=true;
+    
+    // long repeats without other support
+    if ( strong[i].un*2>msc::bam_l_qseq && 
+	 strong[i].rdscore<=0 && strong[i].rpscore<=0 ) is_weak=true;
+    
+    // no pair or reads support and read depths not perfect
+    if ( strong[i].rpscore<=0 && strong[i].srscore<=0 ) {
+      if ( strong[i].F2_rd*4<strong[i].R1_rd || 
+	   strong[i].R1_rd*4<strong[i].F2_rd ) is_weak=true;
+      if ( strong[i].F2 > strong[i].R1 && 
+	   strong[i].rd < max(strong[i].F2_rd, strong[i].R1_rd) ) is_weak=true;
+      if ( strong[i].F2 < strong[i].R1 && 
+	   strong[i].rd > min(strong[i].F2_rd, strong[i].R1_rd) ) is_weak=true;
+    }
+    
+    // high read depth but no rp or sr support
+    if ( strong[i].rd > 50 && abs(strong[i].F2-strong[i].R1)>msc::bam_pe_insert_sd*7 &&
+	 strong[i].rpscore<=0 && strong[i].srscore<=0 &&
+	 strong[i].rdscore<=1 )  is_weak=true;
     
     if ( is_weak ) {
       weak.push_back(strong[i]);

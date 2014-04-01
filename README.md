@@ -2,6 +2,8 @@
 
 This is an updated version of [matchclips](https://github.com/yhwu/matchclips) to precisely locate the break points of structure variations. This update mainly focuses on speed and reproducibility, and is intended for real data large files. A 70x coverage whole genome sequencing BAM file should take about 5-8 hours on a single cpu and use about 2-3GB memory. It is not really helpful to use more than 4 cores. Performance suffers if the computing node is disk IO busy. 
 
+This program is constantly updated as new functions are added, bugs are corrected, and better algorithms are developed. If you need some feature, please let me know as that will help my research as well. 
+
 This program works as follows:
 
 1. use read depths to detect longer CNVs and test them ( to be added later, [rsicnv](https://github.com/yhwu/rsicnv)! );
@@ -78,8 +80,11 @@ Please cite MATCHCLIPS by ```doi: 10.3389/fgene.2013.00157```.
      n2: percentage of mapq<=10
 ```
 Note: 
- Any negative number means the field is not calculated, either because it is not necessary, or not useful.
- Along the main ```$output``` file, ```$output.weak``` contains CNVs of weaker signal. Short indels(<10 bases) are detected too. But, seriously, short indels ought to be detected directly by mapping software.     
+ The result can be passed with ```passcnv.pl```.
+
+Any negative number means the field is not calculated, either because it is not necessary, or not useful.
+
+Along the main ```$output``` file, ```$output.weak``` contains CNVs of weaker signal. Short indels(<10 bases) are detected too.      
 
 ## Usage
 ```
@@ -117,6 +122,50 @@ awk '{OFS="\t"; print $1,$2,$3,0,0,$0}' $CNV > $CNV.anno_input
 $ANNOVAR/table_annovar.pl $CNV.anno_input $ANNOVAR/humandb/ -buildver hg19 -out $CNV.anno -remove -protocol refGene,phastConsElements46way,genomicSuperDups,esp6500si_all,1000g2012apr_all,snp135,ljb2_all -operation g,r,r,f,f,f,f -nastring NA -csvout 
 append_anno.pl $CNV $CNV.anno.hg19_multianno.csv > $CNV.anno
 rm $CNV.anno_input $CNV.anno.hg19*
+```
+
+## Case study
+Let's say, we have many exome bams listed in bamf.txt.
+```
+$cat bamf.txt
+
+1.bam
+2.bam
+...
+1000.bam
+```
+
+We could submit the jobs with a script
+```
+for f in `cat bamf.txt`; do 
+    echo $f; 
+	matchclips -t 4 -L 10000 -f hg19.fasta -b $f -o $f.mc
+done
+```
+and list the results in cnvf.txt
+```
+cat bamf.txt | awk '{print $1".mc"}' > cnvf.txt
+```
+We could then check their overlap with 
+```
+cnvtable -L 10000 -cnvf cnvf.txt -O 0.5 -o overlap.txt
+```
+and from there, you can analyze with your R code.
+
+Note that I used the option ```-L 10000``` to let the program do matching between two reads within 10000 bases because it should be long enough for exome CNVs and won't take much time for exome data. For whole genome sequencing, you should experiment to have it done in an acceptable time.
+
+Also note that it is absolutely necessary to double a region if you find it interesting. You could check all the CNVs in that region from all the samples with
+```
+cnvtable -R n:xxx-xxx -cnvf cnvf.txt
+```
+and you will also need to visually check the reads using IGV with a batch script
+```
+new
+genome hg19
+snapshotDirectory ./snapshots
+load 1.bam
+goto n:xxx-xxx
+collapse
 ```
 
 ## Installation

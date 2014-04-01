@@ -124,6 +124,53 @@ void read_samplecnvfile(string& inpfile,
   return;
 }
 
+void subsetcnv(string& region, vector<string>& samplecnvfile, vector<string>& sampleid, double rOverlap)
+{
+  if ( region=="" || samplecnvfile.empty() ) return;
+  
+  cnv_st icnv, rcnv;
+  rcnv.RNAME=""; rcnv.P1=1; rcnv.P2=0x7fffffff;
+  
+  size_t comma=region.find(":"); 
+  size_t minus=region.find("-");
+  rcnv.RNAME = comma==string::npos ? region : region.substr(0,comma);
+  
+  if ( comma>0 && minus>0 && minus>comma ) {
+    rcnv.P1=atoi( region.substr(comma+1, minus-comma-1).c_str() );
+    rcnv.P2=atoi( region.substr(minus+1).c_str() ) ;
+    if ( rcnv.P1 > rcnv.P2 ) swap(rcnv.P1, rcnv.P2);
+  }
+  cerr << rcnv.RNAME << ":" << rcnv.P1 << "-" << rcnv.P2 << endl;
+
+  cout << "##subset\t" << rcnv.RNAME << ":" << rcnv.P1 << "-" << rcnv.P2 << "\t" 
+       << rcnv.P2-rcnv.P1+1 << endl;
+  for(size_t i=0;i<samplecnvfile.size();++i) {
+    
+    if ( ! file_exist(samplecnvfile[i]) ) { 
+      cerr << samplecnvfile[i] << " not found\n"; 
+      exit(0); 
+    }
+    
+    cout << "#" << sampleid[i] << "\t" << samplecnvfile[i] << endl;
+    ifstream FIN(samplecnvfile[i].c_str()) ;
+    while ( !FIN.eof() ) {
+      string tmps,tmps1;
+      getline(FIN,tmps);
+      if ( tmps[0] == '#' || tmps.length() <2 ) continue;
+      istringstream iss(tmps);
+      iss >> icnv.RNAME >> icnv.P1 >> icnv.P2 >> icnv.type;
+      if ( icnv.P1 > icnv.P2 ) swap(icnv.P1, icnv.P2);
+      if ( cnv_overlap_length(icnv, rcnv)>
+	   rOverlap*(double)max(icnv.P2-icnv.P1, rcnv.P2-rcnv.P1)  ) 
+	cout << tmps << endl;
+    }
+    FIN.close();
+    
+  }
+  
+  return;
+}
+
 int usage_check_sample_table(int argc, char* argv[]) {
   cerr << "Function:\n  This program tabulates CNV overlaps from multiple CNV files\n"
        << "\nUsage:\n" 
@@ -135,6 +182,7 @@ int usage_check_sample_table(int argc, char* argv[]) {
        << "  -l    INT  minimum length to include, INT=3 \n"
        << "  -L    INT  maximum length to include, INT=10000000 \n"
        << "  -t    STR  only process STR type of CNVs\n"
+       << "  -R    STR  subset cnvs in region STR\n"
        << "  -O  FLOAT  minimum reciprocal overlap ratio [0.0, 1.0], FLOAT=0.5\n"
        << "  -o    STR  outputfile, STR=STDOUT \n"
        << "\nExamples :\n"
@@ -160,6 +208,7 @@ int check_sample_table(int argc, char* argv[])
   int minLength=3,maxLength=10000000;
   double rOverlap=0.5;
   string cnvFileList="", cnvFile="", outputFile="STDOUT";
+  string region="";
   vector<string> inputArgv;
   vector<string> samplecnvfile(0);
   vector<string> sampleid(0);
@@ -194,35 +243,18 @@ int check_sample_table(int argc, char* argv[])
       }
       continue;
     }
-    if ( inputArgv[i]=="-cnvf" ) {  // input variation files
-      cnvFileList=inputArgv[i+1];
-      _next2;
-    }
-    if ( inputArgv[i]=="-l" ) {  // minimum length
-      minLength=atoi(inputArgv[i+1].c_str());
-      _next2;
-    }
-    if ( inputArgv[i]=="-L" ) {  // max length
-      maxLength=atoi(inputArgv[i+1].c_str());
-      _next2;
-    }
-    if ( inputArgv[i]=="-t" ) {  // cnv type
-      CNVTYPE=inputArgv[i+1];
-      _next2;
-    }
-    if ( inputArgv[i]=="-O" ) {  // output file
-      rOverlap=atof(inputArgv[i+1].c_str());
-      _next2;
-    }
-    if ( inputArgv[i]=="-o" ) {  // output file
-      outputFile=inputArgv[i+1];
-      _next2;
-    }
+    if ( inputArgv[i]=="-cnvf" ) { cnvFileList=inputArgv[i+1];  _next2; }
+    if ( inputArgv[i]=="-l" ) { minLength=atoi(inputArgv[i+1].c_str()); _next2; }
+    if ( inputArgv[i]=="-L" ) { maxLength=atoi(inputArgv[i+1].c_str()); _next2; }
+    if ( inputArgv[i]=="-t" ) { CNVTYPE=inputArgv[i+1]; _next2; }
+    if ( inputArgv[i]=="-R" ) { region=inputArgv[i+1]; _next2; }
+    if ( inputArgv[i]=="-O" ) { rOverlap=atof(inputArgv[i+1].c_str()); _next2; }
+    if ( inputArgv[i]=="-o" ) { outputFile=inputArgv[i+1]; _next2; }
   }
   
   if ( cnvFileList!="" ) read_samplecnvfile(cnvFileList, samplecnvfile, sampleid);
   if ( rOverlap>1.0 || rOverlap<0.0 ) {
-    cerr << "Overlap ration must be between 0.0 and 1.0" << endl;
+    cerr << "Overlap ratio must be between 0.0 and 1.0" << endl;
     exit( usage_check_sample_table(argc, argv) );
   }
   if ( samplecnvfile.size()==0 ) exit( usage_check_sample_table(argc, argv) );
@@ -231,7 +263,7 @@ int check_sample_table(int argc, char* argv[])
   
   // infer sample id from filenames
   if ( sampleid.size() != samplecnvfile.size() ) {
-    sampleid.empty();
+    sampleid.clear();
     for(size_t i=0;i<samplecnvfile.size();++i) {
       size_t found=samplecnvfile[i].rfind('/');
       string id=samplecnvfile[i].substr(found+1);
@@ -247,6 +279,12 @@ int check_sample_table(int argc, char* argv[])
   if ( outputFile != "STDOUT" ) {
     FOUT.open(outputFile.c_str());
     cout.rdbuf(FOUT.rdbuf());
+  }
+  
+  cnv_st rcnv;
+  if ( region!="" ) {
+    subsetcnv(region, samplecnvfile, sampleid, rOverlap);
+    return 0; 
   }
   
   vector<cnv_st> allcnvlist(0);

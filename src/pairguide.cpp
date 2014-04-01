@@ -240,67 +240,104 @@ void check_normal_and_abnormalpairs_cross_region(int ref, int F2, int R1,
   p_F2=p_R1=p_F2R1=0;
   if ( ! msc::bam_is_paired ) return;
   
+  
   bam1_t *b=NULL;   
   b = bam_init1();
   bam_iter_t iter=0;
   int beg,end;
   
-  int dx = msc::bam_pe_insert+7*msc::bam_pe_insert_sd;
+  int dx = msc::bam_pe_insert+5*msc::bam_pe_insert_sd;
   
+  size_t p_F2R1_LS=0;
   beg=max(1, F2-dx);
   end=F2;
   iter = bam_iter_query(msc::bamidx, ref, beg, end);
   while( bam_iter_read(msc::fp_in->x.bam, iter, b)>0 ) {
     if ( b->core.tid!=ref ) break;
     if ( !is_read_count_for_pair(b) ) continue; 
+    if ( b->core.flag & BAM_FREVERSE ) continue;  // since we checked -dx, we need FORWARD
     
     int F1,R2; bool F1a,R2a;
     check_outer_pair_ends(b, F1, F1a, R2, R2a); 
-    int isize=R2-F1;
-    if ( !(b->core.flag & BAM_FREVERSE) &&  // since we checked -dx, we need FORWARD
-	 isize > msc::bam_pe_insert-5*msc::bam_pe_insert_sd && 
-	 isize < msc::bam_pe_insert+5*msc::bam_pe_insert_sd ) {
-      // pair is normal
-      p_F2 += ( F1<F2 && R2>F2 );
+    
+    int isize= R2-F1;
+    int bisize= F2-F1+R2-R1;
+    bool cross_point = ( F1<F2 && R2>F2 );
+    bool cross_sv = ( F1<=F2 && R2>=R1 );
+    
+    if ( cross_point && cross_sv ) {
+      if ( abs(isize-msc::bam_pe_insert)<abs(bisize-msc::bam_pe_insert) ) {
+	// assigned to normal
+	if ( isize > msc::bam_pe_insert-5*msc::bam_pe_insert_sd && 
+	     isize < msc::bam_pe_insert+5*msc::bam_pe_insert_sd ) ++p_F2;
+      }
+      else {
+	// assigned to abnormal
+	if ( bisize>msc::bam_pe_insert-7*msc::bam_pe_insert_sd &&
+	     bisize<msc::bam_pe_insert+7*msc::bam_pe_insert_sd ) ++p_F2R1_LS;
+      }
+      continue;
+    }
+    if ( cross_point ) {
+      if ( isize > msc::bam_pe_insert-5*msc::bam_pe_insert_sd && 
+	   isize < msc::bam_pe_insert+5*msc::bam_pe_insert_sd ) ++p_F2;
+      continue;
+    }
+    if ( cross_sv ) { 
+      if ( abs(bisize-msc::bam_pe_insert)<abs(isize-msc::bam_pe_insert) &&
+	   bisize>msc::bam_pe_insert-7*msc::bam_pe_insert_sd &&
+	   bisize<msc::bam_pe_insert+7*msc::bam_pe_insert_sd ) ++p_F2R1_LS;
       continue;
     }
     
-    if ( F1<=F2 && R2>=R1 ) {
-      int bisize=F2-F1+R2-R1;
-      if ( bisize>0 &&
-	   bisize>msc::bam_pe_insert-7*msc::bam_pe_insert_sd &&
-	   bisize<msc::bam_pe_insert+7*msc::bam_pe_insert_sd ) ++p_F2R1;
-    }
   }
   
+  size_t p_F2R1_RS=0;
   beg=R1;
   end=R1+dx;
   iter = bam_iter_query(msc::bamidx, ref, beg, end);
   while( bam_iter_read(msc::fp_in->x.bam, iter, b)>0 ) {
     if ( b->core.tid!=ref ) break;
     if ( !is_read_count_for_pair(b) ) continue; 
+    if ( ! (b->core.flag & BAM_FREVERSE) ) continue;  // since we checked +dx, we need R
     
     int F1,R2; bool F1a,R2a;
     check_outer_pair_ends(b, F1, F1a, R2, R2a); 
-    int isize=R2-F1;
-    if ( b->core.flag & BAM_FREVERSE && // since we checked +dx, we need REVERSE
-	 isize > msc::bam_pe_insert-5*msc::bam_pe_insert_sd && 
-	 isize < msc::bam_pe_insert+5*msc::bam_pe_insert_sd ) {
-      // pair is normal
-      p_R1 += ( F1<R1 && R2>R1 );
+    
+    int isize= R2-F1;
+    int bisize= F2-F1+R2-R1;
+    bool cross_point = ( F1<R1 && R2>R1 );
+    bool cross_sv = ( F1<=F2 && R2>=R1 );
+    
+    if ( cross_point && cross_sv ) {
+      if ( abs(isize-msc::bam_pe_insert)<abs(bisize-msc::bam_pe_insert) ) {
+	// assigned to normal
+	if ( isize > msc::bam_pe_insert-5*msc::bam_pe_insert_sd && 
+	     isize < msc::bam_pe_insert+5*msc::bam_pe_insert_sd ) ++p_R1;
+      }
+      else {
+	// assigned to abnormal
+	if ( bisize>msc::bam_pe_insert-7*msc::bam_pe_insert_sd &&
+	     bisize<msc::bam_pe_insert+7*msc::bam_pe_insert_sd ) ++p_F2R1_RS;
+      }
       continue;
     }
-    
-    if ( F1<=F2 && R2>=R1 ) {
-      int bisize=F2-F1+R2-R1;
-      if ( bisize>0 &&
+    if ( cross_point ) {
+      if ( isize > msc::bam_pe_insert-5*msc::bam_pe_insert_sd && 
+	   isize < msc::bam_pe_insert+5*msc::bam_pe_insert_sd ) ++p_R1;
+      continue;
+    }
+    if ( cross_sv ) { 
+      if ( abs(bisize-msc::bam_pe_insert)<abs(isize-msc::bam_pe_insert) &&
 	   bisize>msc::bam_pe_insert-7*msc::bam_pe_insert_sd &&
-	   bisize<msc::bam_pe_insert+7*msc::bam_pe_insert_sd ) ++p_F2R1;
+	   bisize<msc::bam_pe_insert+7*msc::bam_pe_insert_sd ) ++p_F2R1_RS;
+      continue;
     }
     
   }
   // since we checked both -dx and +dx, both segments were counted
-  p_F2R1/=2;
+  //  p_F2R1/=2;
+  p_F2R1=max(p_F2R1_LS, p_F2R1_RS);
   
   if ( p_F2 < 10 ) p_F2=check_normalpairs_cross_pos(ref, F2); 
   if ( p_R1 < 10 ) p_R1=check_normalpairs_cross_pos(ref, R1); 
@@ -591,15 +628,15 @@ void match_reads_for_pairs(pairinfo_st& ipairbp, string& FASTA, int dx, bool poi
     if ( b->core.tid != msc::bam_ref ) break;
     if ( b->core.pos > end ) break;
     if ( ! is_read_count_for_depth(b) ) continue;
-    //if ( pointmode && 
-    //	 b->core.pos+msc::bam_l_qseq/5 > ipairbp.F2 ) break;
-    POSCIGAR_st bm; resolve_cigar_pos(b, bm, 0);  
-    if ( bm.pos<=0 || bm.op.size()<1 ) continue;
-    bool cover= bm.cop[0] <= ipairbp.F2 && 
-      bm.cop.back()+bm.nop.back()*(bm.op.back()!=BAM_CHARD_CLIP) >= ipairbp.F2; 
-    MS_F2_rd+=cover;
-    
-    if ( pointmode && (! cover)  ) continue;
+    if ( pointmode ) {
+      POSCIGAR_st bm; 
+      resolve_cigar_pos(b, bm, 0);  
+      if ( bm.pos<=0 || bm.op.size()<1 ) continue;
+      bool is_cover= bm.cop[0] <= ipairbp.F2 && 
+	bm.cop.back()+bm.nop.back()*(bm.op.back()!=BAM_CHARD_CLIP) >= ipairbp.F2; 
+      MS_F2_rd+=is_cover;
+      if ( ! is_cover ) continue;
+    }
     
     _save_read_in_vector(b, ibam, bdata);
     b_F2.push_back(ibam);
@@ -614,15 +651,15 @@ void match_reads_for_pairs(pairinfo_st& ipairbp, string& FASTA, int dx, bool poi
     if ( b->core.tid != msc::bam_ref ) break;
     if ( b->core.pos > end ) break;
     if ( ! is_read_count_for_depth(b) ) continue;
-    //if ( pointmode && 
-    //	 b->core.pos+msc::bam_l_qseq/5*4 < ipairbp.R1 ) continue;   
-    POSCIGAR_st bm; resolve_cigar_pos(b, bm, 0);  
-    if ( bm.pos<=0 || bm.op.size()<1 ) continue;
-    bool cover= bm.cop[0] <= ipairbp.R1 && 
-      bm.cop.back()+bm.nop.back()*(bm.op.back()!=BAM_CHARD_CLIP) >= ipairbp.R1; 
-    MS_R1_rd+=cover;
-    
-    if ( pointmode && ( ! cover ) ) continue;
+    if ( pointmode ) {
+      POSCIGAR_st bm; 
+      resolve_cigar_pos(b, bm, 0);  
+      if ( bm.pos<=0 || bm.op.size()<1 ) continue;
+      bool is_cover= bm.cop[0] <= ipairbp.R1 && 
+	bm.cop.back()+bm.nop.back()*(bm.op.back()!=BAM_CHARD_CLIP) >= ipairbp.R1; 
+      MS_R1_rd+=is_cover;
+      if ( ! is_cover ) continue;
+    }
     
     _save_read_in_vector(b, ibam, bdata);
     b_R1.push_back(ibam);

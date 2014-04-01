@@ -392,7 +392,7 @@ void match_reads_for_exhaustive_search(int thread_id,
       get_break_points(FASTA, &b_MS[i], &b_SM[k], p1, p_err, F2, R1, e_dis);
       int ml=p1+readSM.length();                      // merged length
       if ( e_dis*15 > ml ) continue;
-      if ( R1-F2==1 ) continue; 
+      if ( R1-F2==1 ) continue;         // overlapped reads 
       
       size_t pre_found=0;
       if ( check_length < 0 ) pre_found=0;
@@ -657,7 +657,7 @@ void exhaustive_search(vector<bam1_t>& b_MS, vector<bam1_t>& b_SM,
     mcbp[i]=ibp;    // update rd rp info
     
     // good signal pass
-    if ( mcbp[i].rdscore>=2 && mcbp[i].rpscore>=2 ) continue;
+    // if ( mcbp[i].rdscore>=2 && mcbp[i].rpscore>=2 ) continue;
     // if ( mcbp[i].rpscore>=2 && mcbp[i].sr_count>=9 ) continue;
     // too short for reads matching
     if ( abs(mcbp[i].F2-mcbp[i].R1)<msc::bam_l_qseq/2 ) continue;
