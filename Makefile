@@ -5,4 +5,4 @@ all:
 
 clean:
 	cd src && make clean
-	rm matchclips
+	rm matchclips cnvtable
