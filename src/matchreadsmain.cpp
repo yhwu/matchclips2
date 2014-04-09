@@ -40,6 +40,7 @@ int main(int argc, char* argv[])
   
   string build_time= _BUILD_TIME;
   string updateFile="https://raw.github.com/yhwu/matchclips2/master/src/UPDATED";
+  check_github_update(build_time, updateFile);
   
   time(&begin_T);
   match_MS_SM_reads(argc, argv);  

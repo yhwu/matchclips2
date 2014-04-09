@@ -729,7 +729,7 @@ void runmed(unsigned short int* y, unsigned short int* smo, int n, int band)
 { Srunmed(y, smo, n, band, 0, 0); }
 
 
-void check_github_update(string compiledTime, string gitupdate)
+bool check_github_update(string compiledTime, string gitupdate)
 {
   string updatedTime="NULL";
   time_t compiled=0, gittime=0;
@@ -778,19 +778,21 @@ void check_github_update(string compiledTime, string gitupdate)
   
   
   //cerr << compiledTime << "\t" << compiled << "\n"
-  //   << updatedTime << "\t" << gittime << endl
-  //   << difftime(gittime, compiled) << endl;
+  //    << updatedTime << "\t" << gittime << endl
+  //    << difftime(gittime, compiled) << endl;
   
   if ( gittime==0 ) gittime=compiled;
   
   if ( compiled != gittime ) {
     if ( compiled < gittime ) 
-      cerr << "matchclips is updated at github on " << updatedTime << " UTC\n"
-	   << "your version was stamped " << compiledTime << " UTC\n"
-	   << "please download from https://github.com/yhwu/matchclips2\n"
+      cerr << "Update:\n"
+	   << "  matchclips is updated at github on " << updatedTime << " UTC\n"
+	   << "  your version was stamped " << compiledTime << " UTC\n"
+	   << "  please download from https://github.com/yhwu/matchclips2\n"
 	   << endl; 
+    return true;
   }
   
-  return;
+  return false;
 }
 
