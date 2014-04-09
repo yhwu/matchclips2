@@ -415,6 +415,69 @@ void check_cnv_readdepth(int ref, int beg, int end, int dx,
   return;
 }
 
+void check_cnv_readdepth_100(int ref, int beg, int end, 
+			     int& d1, int& din1, int& din2, int& d2) 
+{
+  d1=d2=din1=din2=-1;
+
+  int dx=100;
+  bool switched=false;
+  if ( beg>end ) {
+    swap(beg, end);
+    switched=true;
+  }
+  
+  if ( ref != msc::bam_ref || 
+       msc::rd.size() != msc::fp_in->header->target_len[ref] ) {
+    cerr << "this subsroutine is not intended for tid:" << ref 
+	 << " of length " << msc::fp_in->header->target_len[ref] << endl
+	 << "current buffer is for tid:" << msc::bam_ref
+	 << " of length " << msc::rd.size() << endl;
+    exit(0);
+  }
+  
+  double rd1=0, rd2=0, rdin1=0, rdin2=0;
+  for(int i=beg-dx+1-switched; i<=beg-switched; ++i) 
+    if ( i>=0 && i<(int)msc::rd.size() ) rd1 += msc::rd[i] ;  
+  rd1/=(double)dx;
+  d1=rd1+0.5;
+  
+  for(int i=end+switched; i<end+dx+switched; ++i) 
+    if ( i>=0 && i<(int)msc::rd.size() ) rd2 += msc::rd[i] ;  
+  rd2/=(double)dx;
+  d2=rd2+0.5;
+  
+  if ( end-beg<=dx ) {
+    rdin1=0;
+    for(int i=beg+1-switched; i<end+switched; ++i) 
+      if ( i>=0 && i<(int)msc::rd.size() ) rdin1 += msc::rd[i] ;  
+    rdin1/=(double)(end-beg-1+switched+switched+0.000000001f);
+    din1=rdin1+0.5;
+    din2=din1;
+  }
+  else {
+    rdin1=0;
+    for(int i=beg+1-switched; i<=beg+1-switched+dx; ++i) 
+      if ( i>=0 && i<(int)msc::rd.size() ) rdin1 += msc::rd[i] ;  
+    rdin1/=(double)(dx+0.000000001f);
+    din1=rdin1+0.5;
+    
+    rdin2=0;
+    for(int i=end+switched-dx; i<end+switched; ++i) 
+      if ( i>=0 && i<(int)msc::rd.size() ) rdin2 += msc::rd[i] ;  
+    rdin2/=(double)(dx+0.000000001f);
+    din2=rdin2+0.5;
+  }
+  
+  
+  if ( switched ) { 
+    swap(d1, d2); 
+    swap(din1, din2);
+  }
+  
+  return;
+}
+
 //! check if readMS and readSM overlap with miinimum minOver charactors
 //! maxErr mismatches are tolorated
 //! readMS is always fully overlaped with or in front of readSM
@@ -773,12 +836,14 @@ void prepare_pairend_matchclip_data(int ref, int beg, int end,
       size_t p_pos=msc::bdata.size();
       _save_read_in_vector(b, ibam, msc::bdata);
       if ( iread.sbeg > iread.pos ) {
-	b_MS.push_back(ibam); // type M...S
-	p_MS.push_back(p_pos);
+	// type M...S    
+	b_MS.push_back(ibam);  // save bam_t
+	p_MS.push_back(p_pos); // save relative pointer to vector
       }
       else {
-	b_SM.push_back(ibam);  // type S...M
-	p_SM.push_back(p_pos);
+	// type S...M
+	b_SM.push_back(ibam);  // save bam_t
+	p_SM.push_back(p_pos); // save relative pointer to vector
       }
     }
   }
@@ -881,6 +946,10 @@ void stat_region(pairinfo_st& ibp, string& FASTA, int dx)
   check_cnv_readdepth(ibp.tid, ibp.F2, ibp.R1, dx, 
 		      ibp.F2_rd, ibp.R1_rd, ibp.rd);
   
+  check_cnv_readdepth_100(ibp.tid, ibp.F2, ibp.R1, 
+			  ibp.F2_rd_100, ibp.rd_F2_100, 
+			  ibp.rd_R1_100, ibp.R1_rd_100);
+  
   if ( msc::bam_is_paired && 
        ( ibp.R1-ibp.F2>msc::bam_pe_insert_sd*3 || 
 	 ibp.R1-ibp.F2<-msc::bam_l_qseq ) ) {
@@ -904,6 +973,7 @@ void assess_rd_rp_sr_infomation(pairinfo_st& ibp, int medRD, int medRP)
   
   int rpscore=0;
   int rdscore=0;
+  int ddscore=0;
   int srscore=0;
   
   // find out normal read depth and pairs around bp
@@ -944,6 +1014,32 @@ void assess_rd_rp_sr_infomation(pairinfo_st& ibp, int medRD, int medRP)
   }
   if ( min(ibp.F2_rd, ibp.R1_rd) < 8 ) rdscore=0; // low signal override
   
+  // derivative of read depth score
+  if ( ibp.F2 < ibp.R1 ) { 
+    // DEL type of signal
+    if ( ibp.rd_F2_100 < ibp.F2_rd_100*3/4 && 
+	 ibp.rd_R1_100 < ibp.R1_rd_100*3/4 ) ddscore=1;
+    if ( ibp.rd_F2_100 < ibp.F2_rd_100*2/3 && 
+	 ibp.rd_R1_100 < ibp.R1_rd_100*2/3 ) ddscore=2;
+    if ( ibp.rd_F2_100 < ibp.F2_rd_100*4/7 && 
+	 ibp.rd_R1_100 < ibp.R1_rd_100*4/7 ) ddscore=3;
+    if ( ibp.rd_F2_100 < ibp.F2_rd_100*1/2 && 
+	 ibp.rd_R1_100 < ibp.R1_rd_100*1/2 ) ddscore=4;
+  }
+  else { 
+    // DUP type
+    if ( ibp.rd_F2_100 > ibp.F2_rd_100*5/4 && 
+	 ibp.rd_R1_100 > ibp.R1_rd_100*5/4 ) ddscore=1;
+    if ( ibp.rd_F2_100 > ibp.F2_rd_100*4/3 && 
+	 ibp.rd_R1_100 > ibp.R1_rd_100*4/3 ) ddscore=2;
+    if ( ibp.rd_F2_100 > ibp.F2_rd_100*3/2 && 
+	 ibp.rd_R1_100 > ibp.R1_rd_100*3/2 ) ddscore=3;
+    if ( ibp.rd_F2_100 > ibp.F2_rd_100*9/5 && 
+	 ibp.rd_R1_100 > ibp.R1_rd_100*9/5 ) ddscore=4;
+  }
+  if ( min(ibp.F2_rd_100, ibp.R1_rd_100) < 8 ) ddscore=0;
+  
+  
   // matching read score
   if ( ibp.F2_rd>0 && ibp.R1_rd>0 ) { 
     // read depth available
@@ -983,9 +1079,12 @@ void assess_rd_rp_sr_infomation(pairinfo_st& ibp, int medRD, int medRP)
   if ( ibp.F2_sr<=2 && ibp.R1_sr<=2 ) if ( srscore>0 ) srscore=0;
   if ( ibp.F2_sr<=2 || ibp.R1_sr<=2 ) if ( srscore>1 ) srscore=1;
   
+  if ( ddscore==0 ) rdscore=0;
+  
   // only update score for calculated values
   if ( ibp.F2_rp>=0 ) ibp.rpscore=rpscore;
   if ( ibp.F2_rd>=0 ) ibp.rdscore=rdscore;
+  if ( ibp.F2_rd_100>=0 ) ibp.ddscore=ddscore;
   if ( ibp.F2_sr>=0 ) ibp.srscore=srscore;
   
   return;

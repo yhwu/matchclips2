@@ -183,6 +183,7 @@ int usage_check_sample_table(int argc, char* argv[]) {
        << "  -L    INT  maximum length to include, INT=10000000 \n"
        << "  -t    STR  only process STR type of CNVs\n"
        << "  -R    STR  subset cnvs in region STR\n"
+       << "  -chr       1-22XY are treated as chr[1-22XY]\n"
        << "  -O  FLOAT  minimum reciprocal overlap ratio [0.0, 1.0], FLOAT=0.5\n"
        << "  -o    STR  outputfile, STR=STDOUT \n"
        << "\nExamples :\n"
@@ -207,6 +208,7 @@ int check_sample_table(int argc, char* argv[])
   string CNVTYPE="";
   int minLength=3,maxLength=10000000;
   double rOverlap=0.5;
+  bool convert_to_chr=false;
   string cnvFileList="", cnvFile="", outputFile="STDOUT";
   string region="";
   vector<string> inputArgv;
@@ -248,6 +250,7 @@ int check_sample_table(int argc, char* argv[])
     if ( inputArgv[i]=="-L" ) { maxLength=atoi(inputArgv[i+1].c_str()); _next2; }
     if ( inputArgv[i]=="-t" ) { CNVTYPE=inputArgv[i+1]; _next2; }
     if ( inputArgv[i]=="-R" ) { region=inputArgv[i+1]; _next2; }
+    if ( inputArgv[i]=="-chr" ) { convert_to_chr=true; _next1; }
     if ( inputArgv[i]=="-O" ) { rOverlap=atof(inputArgv[i+1].c_str()); _next2; }
     if ( inputArgv[i]=="-o" ) { outputFile=inputArgv[i+1]; _next2; }
   }
@@ -309,6 +312,13 @@ int check_sample_table(int argc, char* argv[])
       if ( icnv.P1 > icnv.P2 ) swap(icnv.P1, icnv.P2);
       if ( icnv.P2 - icnv.P1 < minLength ) continue;
       if ( icnv.P2 - icnv.P1 > maxLength ) continue;
+      
+      if ( convert_to_chr ) {
+	if ( atoi(icnv.RNAME.c_str()) || 
+	     icnv.RNAME=="X" || 
+	     icnv.RNAME=="Y" ) 
+	  icnv.RNAME="chr"+icnv.RNAME;
+      }
       
       cnvlist.push_back(icnv);
     }
@@ -373,6 +383,13 @@ int check_sample_table(int argc, char* argv[])
       if ( icnv.P2 - icnv.P1 > maxLength ) continue;
       if ( CNVTYPE!=""  && icnv.type != CNVTYPE) continue;
       
+      if ( convert_to_chr ) {
+	if ( atoi(icnv.RNAME.c_str()) || 
+	     icnv.RNAME=="X" || 
+	     icnv.RNAME=="Y" ) 
+	  icnv.RNAME="chr"+icnv.RNAME;
+      }
+      
       cnvlist.push_back(icnv);
     }
     sort(cnvlist.begin(), cnvlist.end(), comp_cnv_st);
@@ -415,18 +432,19 @@ int check_sample_table(int argc, char* argv[])
 	sumocnv[i]++;
       }
   
-  cout << "##sampleid_and_inputfile\n";
+  cout << "##commandline: " << mycommand << "\n"
+       << "##length included: [" << minLength << ", " << maxLength << "]\n"
+       << "##minimum reciprocal overlap required: " << rOverlap << "\n"
+       << "##collumid and inputfile:\n";
   for(size_t i=0;i<samplecnvfile.size();++i) 
     cout << "##S" << i+1 << "\t" 
 	 << sampleid[i] << "\t" 
 	 << samplecnvfile[i] << "\n";
-  cout << "##length of cnv included: [" << minLength << ", " << maxLength << "]" << endl;
-  cout << "##portion of reciprocal overlap required: " << rOverlap << endl;
   
-  cout << "#RNAME\t" << "POS1\t" << "POS2\t" << "TYPE\t" << "ROWSUM";
+  cout << "#RNAME\t" << "POS1\t" << "POS2\t" << "TYPE\t" << "LEN\t" <<  "ROWSUM";
   for(size_t i=0;i<samplecnvfile.size();++i) cout << "\tS" << i+1;
   cout << "\n";
-  cout << "##CSUM\t" << "POS1\t" << "POS2\t" << "TYPE\t" << "ROWSUM";
+  cout << "##CSUM\t" << "POS1\t" << "POS2\t" << "TYPE\t" << "LEN\t" << "ROWSUM";
   for(size_t i=0;i<samplecnvfile.size();++i) cout << "\t" << sumocnv[i];
   cout << endl;
   
@@ -435,6 +453,7 @@ int check_sample_table(int argc, char* argv[])
 	 << allcnvlist[k].P1 << "\t"
 	 << allcnvlist[k].P2 << "\t"
 	 << allcnvlist[k].type << "\t"
+	 << abs(allcnvlist[k].P2-allcnvlist[k].P1) << "\t"
 	 << sumoid[k];
     for(size_t i=0;i<samplecnvfile.size();++i) cout << "\t" << cnvoverlap[k][i];
     cout << endl;

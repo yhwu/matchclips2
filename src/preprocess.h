@@ -34,9 +34,8 @@ int mean_readdepth(int ref, int beg, int end) ;
 int median_readdepth(int ref, int beg, int end) ;
 void check_cnv_readdepth(int ref, int beg, int end, int dx, 
 			 int& d1, int& d2, int& din);
-
-void check_cnv_readdepth_2(int ref, int beg, int end, int dx, 
-			   int& d1, int& d2, int& din); 
+void check_cnv_readdepth_100(int ref, int beg, int end, 
+			     int& d1, int& din1, int& din2, int& d2);
 
 void find_displacement(string& FASTA, int F2, int R1, 
 		       int& dx_F2, int& dx_R1);

@@ -110,6 +110,43 @@ bool sort_pair_info_output(const pairinfo_st& p1, const pairinfo_st& p2)
   return p1R<p2R;
 }
 
+string mr_format1(pairinfo_st &ibp)
+{
+  std::stringstream ss;
+  pairinfo_st bp=ibp;
+  
+  string RNAME="chr";
+  if ( bp.tid>=0 && bp.tid<(int)msc::bam_target_name.size() )
+    RNAME=msc::bam_target_name[bp.tid];
+  string TYPE= bp.MS_F2 < bp.MS_R1 ? "DEL" : "DUP";
+  int len=bp.MS_R1-bp.MS_F2;
+  if ( bp.MS_F2>bp.MS_R1 ) {
+    swap (bp.MS_F2, bp.MS_R1);
+    swap (bp.MS_F2_rd, bp.MS_R1_rd);
+    swap (bp.F2_sr, bp.R1_sr);
+  }
+  
+  ss << RNAME << " " 
+     << bp.MS_F2+1 << " " 
+     << bp.MS_R1+1 << " " 
+     << TYPE << " "
+     << len << " "
+     << "UN:" << bp.un << " "
+     << "MD:"
+     << bp.MS_F2_rd << ";"
+     << bp.MS_R1_rd << " "
+     << "MR:"
+     << bp.F2_sr << ";"
+     << bp.R1_sr << ";"
+     << bp.MS_ED << ":"
+     << bp.srscore << " "
+     << "SR:"
+     << bp.sr_ed << ";"
+     << bp.sr_count;
+  
+  return ss.str() ;
+}
+
 string cnv_format1()
 {
   std::stringstream ss;
@@ -119,6 +156,12 @@ string cnv_format1()
      << "TYPE" << "\t"
      << "LENGTH" << "\t"
      << "REF_REPEAT:" << "#" << "\t"
+     << "READDEPTH100:" 
+     << "LOUTSIDE"<< ";"
+     << "LINSIDE"<< ";"
+     << "RINSIDE"<< ";"
+     << "ROUTSIDE"<< ":"
+     << "DDSCORE" << "\t"
      << "READDEPTH:" 
      << "LSIDE" << ";"
      << "RSIDE" << ";"
@@ -153,6 +196,8 @@ string cnv_format1(pairinfo_st &bp1)
   if ( bp.F2>bp.R1 ) { 
     swap(bp.F2, bp.R1);
     swap(bp.F2_rd, bp.R1_rd);
+    swap(bp.F2_rd_100, bp.R1_rd_100);
+    swap(bp.rd_F2_100, bp.rd_R1_100);
     swap(bp.F2_rp, bp.R1_rp);
     swap(bp.F2_sr, bp.R1_sr);
   }
@@ -163,7 +208,13 @@ string cnv_format1(pairinfo_st &bp1)
      << TYPE << "\t"
      << len << "\t"
      << "UN:" << bp.un << "\t"
-     << "RD:" 
+     << "RD100:" 
+     << bp.F2_rd_100 << ";"
+     << bp.rd_F2_100 << ";"
+     << bp.rd_R1_100 << ";"
+     << bp.R1_rd_100 << ":"
+     << bp.ddscore << "\t"
+     << "RD:"
      << bp.F2_rd << ";"
      << bp.R1_rd << ";"
      << bp.rd << ":"
@@ -202,43 +253,6 @@ string cnv_format_all(pairinfo_st &bp1)
   int i10=q10*100+0.5;
   
   ss << cnv_format1(bp1) << "\tQ0:" << i0 << ";" << i10;
-  
-  return ss.str() ;
-}
-
-string mr_format1(pairinfo_st &ibp)
-{
-  std::stringstream ss;
-  pairinfo_st bp=ibp;
-  
-  string RNAME="chr";
-  if ( bp.tid>=0 && bp.tid<(int)msc::bam_target_name.size() )
-    RNAME=msc::bam_target_name[bp.tid];
-  string TYPE= bp.MS_F2 < bp.MS_R1 ? "DEL" : "DUP";
-  int len=bp.MS_R1-bp.MS_F2;
-  if ( bp.MS_F2>bp.MS_R1 ) {
-    swap (bp.MS_F2, bp.MS_R1);
-    swap (bp.MS_F2_rd, bp.MS_R1_rd);
-    swap (bp.F2_sr, bp.R1_sr);
-  }
-  
-  ss << RNAME << " " 
-     << bp.MS_F2+1 << " " 
-     << bp.MS_R1+1 << " " 
-     << TYPE << " "
-     << len << " "
-     << "UN:" << bp.un << " "
-     << "MD:"
-     << bp.MS_F2_rd << ";"
-     << bp.MS_R1_rd << " "
-     << "MR:"
-     << bp.F2_sr << ";"
-     << bp.R1_sr << ";"
-     << bp.MS_ED << ":"
-     << bp.srscore << " "
-     << "SR:"
-     << bp.sr_ed << ";"
-     << bp.sr_count;
   
   return ss.str() ;
 }
@@ -445,7 +459,8 @@ void finalize_output(vector<pairinfo_st>& bp,
     
     // long variation without pair support
     if ( abs(strong[i].F2-strong[i].R1) > msc::bam_pe_insert_sd*7  && 
-	 strong[i].rpscore==0 && msc::bam_is_paired ) is_weak=true;
+	 strong[i].rpscore==0 && msc::bam_is_paired &&
+	 strong[i].srscore<=1 ) is_weak=true;
     
     // long repeats without other support
     if ( strong[i].un*2>msc::bam_l_qseq && 
@@ -823,7 +838,7 @@ void match_MS_SM_reads(int argc, char* argv[])
     }
     
     vector<pairinfo_st> pairbp_mc(0);
-    int search_length=msc::bam_pe_insert+msc::bam_pe_insert_sd*8;
+    int search_length=msc::bam_pe_insert+msc::bam_pe_insert_sd*8+msc::bam_l_qseq*2;
     if ( msc::bam_pe_disabled || msc::search_length_set_by_user ) 
       search_length=msc::maxDistance;
     exhaustive_search(b_MS, b_SM, search_length, FASTA, pairbp_mc);

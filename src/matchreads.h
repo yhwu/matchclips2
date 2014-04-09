@@ -126,10 +126,12 @@ struct pairinfo_st {
   int F2;    // right position of Forward read
   int F2_rp; // num of normal pairs cross F2
   int F2_rd; // read depth within length of a long pair left of F2
+  int F2_rd_100; // read depth 100 bases outside
   bool F2_acurate; // 1: by calend; 0: by mpos+l_qseq
   int R1;    // left position of Reverse Complement read
   int R1_rp; // num of normal pairs cross R1
   int R1_rd; // read depth within length of a long pair right of R1
+  int R1_rd_100; // read depth 100 bases outside R1
   bool R1_acurate; // 1, always given by pos or mpos
   int un;          // break point uncertainty
   int MS_F2;       // F2 calculated by matching
@@ -145,15 +147,19 @@ struct pairinfo_st {
   int sr_count;    // total such
   int rpscore; // score of 2 is considered convincing
   int rdscore; // score of 2 is considered convincing
+  int ddscore; // score of 2 is considered convincing
   int srscore; // score of 2 is considered convincing
   int FRrp; // at least >=6 (3 templates) to be considered 
   int rd;         // read depth between F2 and R1 
+  int rd_F2_100;         // read depth between F2 and R1 
+  int rd_R1_100;         // read depth between F2 and R1 
   pairinfo_st(): 
-    tid(-1), F2(-1), F2_rp(-1), F2_rd(-1), F2_acurate(0), 
-    R1(-1), R1_rp(-1), R1_rd(-1), R1_acurate(0), un(-1), 
+    tid(-1), F2(-1), F2_rp(-1), F2_rd(-1), F2_rd_100(-1), F2_acurate(0), 
+    R1(-1), R1_rp(-1), R1_rd(-1), R1_rd_100(-1), R1_acurate(0), un(-1), 
     MS_F2(-1), MS_F2_rd(-1), MS_R1(-1), MS_R1_rd(-1), MS_ED(-1), MS_ED_count(-1), MS_S_count(-1), 
     F2_sr(-1), R1_sr(-1), sr_ed(-1), sr_count(-1),
-    rpscore(-1), rdscore(-1), srscore(-1), FRrp(-1), rd(-1) {};
+    rpscore(-1), rdscore(-1), ddscore(-1), srscore(-1), FRrp(-1), 
+    rd(-1), rd_F2_100(-1), rd_R1_100(-1) {};
 };
 
 

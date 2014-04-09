@@ -581,6 +581,10 @@ void check_pair_group(vector<intpair_st>& pairs, vector<pairinfo_st>& bpinfo)
     check_cnv_readdepth(msc::bam_ref, ibp.F2, ibp.R1, dx, 
 			ibp.F2_rd, ibp.R1_rd, ibp.rd);
     
+    check_cnv_readdepth_100(msc::bam_ref, ibp.F2, ibp.R1, 
+			    ibp.F2_rd_100, ibp.rd_F2_100,  
+			    ibp.rd_R1_100, ibp.R1_rd_100);
+    
     assess_rd_rp_sr_infomation(ibp);
     
     if ( ibp.rpscore>0 || ibp.rdscore>0 ) bpinfo.push_back(ibp);
